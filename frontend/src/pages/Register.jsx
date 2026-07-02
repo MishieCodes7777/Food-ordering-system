@@ -5,7 +5,9 @@ import { registerUser } from "../services/authService.js";
 import { useAuth } from "../context/AuthContext.jsx";
 import { toast } from "sonner";
 import SmoothInput from "../components/SmoothInput.jsx";
-
+import GoogleLoginButton from "../components/GoogleLoginButton.jsx";
+import api from "../services/api.js";
+import AuroraBackground from "../components/AuroraBackground.jsx";
 const Register = () => {
     const [name, setName] = useState("");
     const [email, setEmail] = useState("");
@@ -50,21 +52,22 @@ const Register = () => {
     };
 
     return (
-        <div className="min-h-screen bg-cream flex items-center justify-center px-4 py-12">
-            <div className="w-full max-w-md">
-                <div className="bg-white rounded-2xl shadow-xl p-8">
+        <div className="min-h-screen flex items-center justify-center px-4 py-12 relative">
+            <AuroraBackground />
+            <div className="w-full max-w-md relative z-10">
+                <div className="dark-inputs bg-[#0d1f1a]/90 border border-white/10 rounded-2xl shadow-2xl p-8">
                     <div className="text-center mb-8">
-                        <h1 className="text-3xl font-bold text-charcoal">
-                            Join Aki<span className="text-accent">o</span>
+                        <h1 className="text-3xl font-bold text-white">
+                            Create Account
                         </h1>
-                        <p className="text-charcoal/60 mt-2">Create your account</p>
+                        <p className="text-white/50 mt-2">Sign up to get started</p>
                     </div>
 
                     {/* Inline error message */}
                     {error && (
-                        <div className="mb-5 flex items-start gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                            <AlertCircle size={18} className="text-red-500 mt-0.5 flex-shrink-0" />
-                            <p className="text-red-600 text-sm">
+                        <div className="mb-5 flex items-start gap-3 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
+                            <AlertCircle size={18} className="text-red-400 mt-0.5 flex-shrink-0" />
+                            <p className="text-red-300 text-sm">
                                 {error}
                                 {error.includes("already exists") && (
                                     <>
@@ -80,65 +83,61 @@ const Register = () => {
 
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <div>
-                            <label htmlFor="name" className="block text-sm font-medium text-charcoal mb-1">
-                                Full Name
-                            </label>
-                            <SmoothInput
+                            <label htmlFor="name" className="block text-sm font-medium text-white/70 mb-1">Full Name</label>
+                            <input
                                 id="name"
                                 type="text"
                                 value={name}
                                 onChange={(e) => { setName(e.target.value); setError(""); }}
                                 required
+                                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                                 placeholder="Your name"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="email" className="block text-sm font-medium text-charcoal mb-1">
-                                Email
-                            </label>
-                            <SmoothInput
+                            <label htmlFor="email" className="block text-sm font-medium text-white/70 mb-1">Email</label>
+                            <input
                                 id="email"
                                 type="email"
                                 value={email}
                                 onChange={(e) => { setEmail(e.target.value); setError(""); }}
                                 required
+                                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                                 placeholder="you@example.com"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="phone" className="block text-sm font-medium text-charcoal mb-1">
-                                Phone Number
-                            </label>
-                            <SmoothInput
+                            <label htmlFor="phone" className="block text-sm font-medium text-white/70 mb-1">Phone Number</label>
+                            <input
                                 id="phone"
                                 type="tel"
                                 value={phone}
                                 onChange={(e) => { setPhone(e.target.value); setError(""); }}
                                 required
+                                className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                                 placeholder="7012XXXXXX"
                             />
                         </div>
 
                         <div>
-                            <label htmlFor="password" className="block text-sm font-medium text-charcoal mb-1">
-                                Password
-                            </label>
+                            <label htmlFor="password" className="block text-sm font-medium text-white/70 mb-1">Password</label>
                             <div className="relative">
-                                <SmoothInput
+                                <input
                                     id="password"
                                     type={showPassword ? "text" : "password"}
                                     value={password}
                                     onChange={(e) => { setPassword(e.target.value); setError(""); }}
                                     required
                                     minLength={8}
+                                    className="w-full px-4 py-3 rounded-lg bg-white/5 border border-white/10 text-white placeholder-white/30 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all pr-12"
                                     placeholder="Min 8 characters"
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-charcoal"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white"
                                     aria-label={showPassword ? "Hide password" : "Show password"}
                                 >
                                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
@@ -149,13 +148,36 @@ const Register = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-primary hover:bg-primary-dark text-white py-3 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-primary hover:bg-primary-light text-white py-3 rounded-lg font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? "Creating account..." : "Create Account"}
                         </button>
                     </form>
 
-                    <p className="text-center text-charcoal/60 mt-6">
+                    {/* Divider */}
+                    <div className="flex items-center gap-3 my-5">
+                        <div className="flex-1 h-px bg-white/10"></div>
+                        <span className="text-white/30 text-sm">or</span>
+                        <div className="flex-1 h-px bg-white/10"></div>
+                    </div>
+
+                    {/* Google Signup */}
+                    <GoogleLoginButton
+                        onSuccess={async (credentialResponse) => {
+                            try {
+                                const res = await api.post("/api/auth/google", { credential: credentialResponse.credential });
+                                login(res.data.user);
+                                toast.success(`Welcome, ${res.data.user.name}!`);
+                                navigate("/menu");
+                            } catch (err) {
+                                setError(err.response?.data?.message || "Google sign up failed");
+                            }
+                        }}
+                        onError={() => setError("Google sign up failed. Please try again.")}
+                        text="signup_with"
+                    />
+
+                    <p className="text-center text-white/40 mt-6">
                         Already have an account?{" "}
                         <Link to="/login" className="text-accent font-medium hover:underline">
                             Sign In

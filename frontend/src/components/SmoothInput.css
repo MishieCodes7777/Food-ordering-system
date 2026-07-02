@@ -46,3 +46,25 @@
   background: #1a3c34;
   transform-origin: center;
 }
+
+/* Dark theme variant */
+.dark-inputs .smooth-input-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.dark-inputs .smooth-input-container {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.dark-inputs .smooth-input {
+  color: #ffffff;
+}
+
+.dark-inputs .smooth-input::placeholder {
+  color: rgba(255, 255, 255, 0.35);
+}
+
+.dark-inputs .smooth-input-underline {
+  background: #e87a2e;
+}

@@ -3,10 +3,13 @@ import { Link, useNavigate } from "react-router-dom";
 import { ShoppingCart, User, Menu, X, LogOut } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useCart } from "../context/CartContext.jsx";
+import useOrderNotifications from "../hooks/useOrderNotifications.js";
+import NotificationBell from "./NotificationBell.jsx";
 
 const Navbar = () => {
     const { user, logout } = useAuth();
     const { itemCount } = useCart();
+    const { notifications, unreadCount, markAllRead, clearNotifications } = useOrderNotifications();
     const navigate = useNavigate();
     const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -46,6 +49,12 @@ const Navbar = () => {
                     <div className="hidden md:flex items-center gap-4">
                         {user ? (
                             <>
+                                <NotificationBell
+                                    notifications={notifications}
+                                    unreadCount={unreadCount}
+                                    markAllRead={markAllRead}
+                                    clearNotifications={clearNotifications}
+                                />
                                 <Link to="/cart" className="relative text-white hover:text-accent transition-colors">
                                     <ShoppingCart size={22} />
                                     {itemCount > 0 && (

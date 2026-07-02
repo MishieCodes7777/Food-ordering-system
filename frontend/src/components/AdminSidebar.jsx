@@ -1,9 +1,12 @@
 import { NavLink } from "react-router-dom";
 import { LayoutDashboard, UtensilsCrossed, FolderOpen, Table2, ClipboardList, BarChart3, Settings, LogOut, X } from "lucide-react";
 import { useAdminAuth } from "../context/AdminAuthContext.jsx";
+import useAdminOrderNotifications from "../hooks/useAdminOrderNotifications.js";
+import AdminNotificationBell from "./AdminNotificationBell.jsx";
 
 const AdminSidebar = ({ onClose }) => {
     const { admin, logout } = useAdminAuth();
+    const { notifications, unreadCount, markAllRead, clearNotifications } = useAdminOrderNotifications();
 
     const links = [
         { to: "/admin", icon: LayoutDashboard, label: "Dashboard", end: true },
@@ -23,9 +26,17 @@ const AdminSidebar = ({ onClose }) => {
                     Aki<span className="text-accent">o</span>
                     <span className="text-white/50 text-sm font-normal ml-2">Admin</span>
                 </h1>
-                <button onClick={onClose} className="lg:hidden text-white/50 hover:text-white" aria-label="Close menu">
-                    <X size={20} />
-                </button>
+                <div className="flex items-center gap-2">
+                    <AdminNotificationBell
+                        notifications={notifications}
+                        unreadCount={unreadCount}
+                        markAllRead={markAllRead}
+                        clearNotifications={clearNotifications}
+                    />
+                    <button onClick={onClose} className="lg:hidden text-white/50 hover:text-white" aria-label="Close menu">
+                        <X size={20} />
+                    </button>
+                </div>
             </div>
 
             {/* Nav Links */}

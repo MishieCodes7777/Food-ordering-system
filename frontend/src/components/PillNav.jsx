@@ -4,11 +4,14 @@ import { gsap } from 'gsap';
 import { ShoppingCart, User, LogOut } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useCart } from '../context/CartContext.jsx';
+import useOrderNotifications from '../hooks/useOrderNotifications.js';
+import NotificationBell from './NotificationBell.jsx';
 import './PillNav.css';
 
 const PillNav = () => {
   const { user, logout } = useAuth();
   const { itemCount } = useCart();
+  const { notifications, unreadCount, markAllRead, clearNotifications } = useOrderNotifications();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -62,7 +65,7 @@ const PillNav = () => {
 
     layout();
     window.addEventListener('resize', layout);
-    if (document.fonts?.ready) document.fonts.ready.then(layout).catch(() => {});
+    if (document.fonts?.ready) document.fonts.ready.then(layout).catch(() => { });
     return () => window.removeEventListener('resize', layout);
   }, []);
 
@@ -123,6 +126,12 @@ const PillNav = () => {
       <div className="pill-nav-actions">
         {user ? (
           <>
+            <NotificationBell
+              notifications={notifications}
+              unreadCount={unreadCount}
+              markAllRead={markAllRead}
+              clearNotifications={clearNotifications}
+            />
             <Link to="/cart" className="pill-action-btn" aria-label="Cart">
               <ShoppingCart size={18} />
               {itemCount > 0 && <span className="pill-action-badge">{itemCount}</span>}

@@ -36,7 +36,18 @@ body {
 .scrollbar-hide::-webkit-scrollbar {
     display: none;
 }
+
 .scrollbar-hide {
     -ms-overflow-style: none;
     scrollbar-width: none;
+}
+
+/* Fix Chrome autofill for dark login pages */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+    -webkit-text-fill-color: #ffffff;
+    -webkit-box-shadow: 0 0 0px 1000px rgba(13, 31, 26, 0.95) inset;
+    border-color: rgba(255, 255, 255, 0.15) !important;
+    transition: background-color 5000s ease-in-out 0s;
 }
