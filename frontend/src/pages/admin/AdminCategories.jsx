@@ -1,86 +1,23 @@
-import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
-import api from "../../services/api.js";
-import { toast } from "sonner";
+import { useAdminCrud } from "../../hooks/useAdminCrud.js";
+import { useImageUpload } from "../../hooks/useImageUpload.js";
+
+const INITIAL_FORM = { name: "", description: "", image_url: "", display_order: 0 };
 
 const AdminCategories = () => {
-    const [categories, setCategories] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ name: "", description: "", image_url: "", display_order: 0 });
-    const [uploading, setUploading] = useState(false);
+    const {
+        items: categories, loading, showModal, setShowModal, editing, form, setForm,
+        openCreate, openEdit, handleSubmit, handleDelete,
+    } = useAdminCrud({
+        endpoint: "/api/admin/categories",
+        listKey: "categories",
+        initialForm: INITIAL_FORM,
+        resourceLabel: "Category",
+        saveErrorMessage: "Failed",
+        deleteErrorMessage: "Failed to delete",
+    });
 
-    useEffect(() => { fetchCategories(); }, []);
-
-    const fetchCategories = async () => {
-        try {
-            const res = await api.get("/api/admin/categories");
-            setCategories(res.data.categories || []);
-        } catch { } finally { setLoading(false); }
-    };
-
-    const openCreate = () => {
-        setEditing(null);
-        setForm({ name: "", description: "", image_url: "", display_order: 0 });
-        setShowModal(true);
-    };
-
-    const openEdit = (cat) => {
-        setEditing(cat);
-        setForm({ name: cat.name, description: cat.description || "", image_url: cat.image_url || "", display_order: cat.display_order || 0 });
-        setShowModal(true);
-    };
-
-    const handleImageUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
-
-        const formData = new FormData();
-        formData.append("image", file);
-
-        setUploading(true);
-        try {
-            const res = await api.post("/api/admin/upload", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
-            setForm((prev) => ({ ...prev, image_url: res.data.image_url }));
-            toast.success("Image uploaded!");
-        } catch (error) {
-            toast.error("Upload not available right now, paste a URL instead.");
-        } finally {
-            setUploading(false);
-            e.target.value = "";
-        }
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        try {
-            if (editing) {
-                await api.put(`/api/admin/categories/${editing.id}`, form);
-                toast.success("Category updated");
-            } else {
-                await api.post("/api/admin/categories", form);
-                toast.success("Category created");
-            }
-            setShowModal(false);
-            fetchCategories();
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Failed");
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if (!confirm("Delete this category?")) return;
-        try {
-            await api.delete(`/api/admin/categories/${id}`);
-            toast.success("Category deleted");
-            fetchCategories();
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Failed to delete");
-        }
-    };
+    const { uploading, handleImageUpload } = useImageUpload((image_url) => setForm((prev) => ({ ...prev, image_url })));
 
     return (
         <div>
@@ -112,7 +49,7 @@ const AdminCategories = () => {
                                     </span>
                                 </div>
                                 <div className="flex gap-2">
-                                    <button onClick={() => openEdit(cat)} className="text-charcoal/40 hover:text-primary transition-colors" aria-label="Edit">
+                                    <button onClick={() => openEdit(cat, (c) => ({ name: c.name, description: c.description || "", image_url: c.image_url || "", display_order: c.display_order || 0 }))} className="text-charcoal/40 hover:text-primary transition-colors" aria-label="Edit">
                                         <Pencil size={16} />
                                     </button>
                                     <button onClick={() => handleDelete(cat.id)} className="text-charcoal/40 hover:text-red-500 transition-colors" aria-label="Delete">

@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Package, Clock, CheckCircle, XCircle, ArrowRight } from "lucide-react";
+import { Package, Clock, CheckCircle, XCircle, ArrowRight, Star } from "lucide-react";
 import { getOrders, cancelOrder } from "../services/orderService.js";
 import { toast } from "sonner";
 import Counter from "../components/Counter.jsx";
+import RateOrderModal from "../components/RateOrderModal.jsx";
 
 const statusConfig = {
     pending: { color: "bg-yellow-100 text-yellow-700", icon: Clock, label: "Pending" },
@@ -18,6 +19,7 @@ const statusConfig = {
 const Orders = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [ratingOrder, setRatingOrder] = useState(null);
 
     useEffect(() => {
         fetchOrders();
@@ -119,6 +121,14 @@ const Orders = () => {
                                                     Cancel
                                                 </button>
                                             )}
+                                            {order.status === "completed" && (
+                                                <button
+                                                    onClick={() => setRatingOrder(order)}
+                                                    className="flex items-center gap-1.5 text-primary hover:text-primary-light text-sm font-medium transition-colors"
+                                                >
+                                                    <Star size={14} /> Rate
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -127,6 +137,10 @@ const Orders = () => {
                     </div>
                 )}
             </div>
+
+            {ratingOrder && (
+                <RateOrderModal order={ratingOrder} onClose={() => setRatingOrder(null)} />
+            )}
         </div>
     );
 };

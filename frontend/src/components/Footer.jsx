@@ -1,4 +1,5 @@
 import { MapPin, Phone, Mail, Clock } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const Footer = () => {
     return (
@@ -15,6 +16,26 @@ const Footer = () => {
                             <div>
                                 <h3 className="font-semibold text-charcoal">Address</h3>
                                 <p className="text-charcoal/70 text-sm">123 Food Street, New Delhi, India</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <div className="bg-accent p-2 rounded-lg">
+                                <Phone size={20} className="text-white" />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-charcoal">Phone</h3>
+                                <p className="text-charcoal/70 text-sm">+91 98765 43210</p>
+                            </div>
+                        </div>
+                        <div className="flex items-start gap-3">
+                            <div className="bg-accent p-2 rounded-lg">
+                                <Phone size={20} className="text-white" />
+                            </div>
+                            <div>
+                                <h3 className="font-semibold text-charcoal">Legal</h3>
+                                <Link to="/terms" className="text-charcoal/70 text-sm hover:text-accent transition-colors block">Terms & Conditions</Link>
+                                <Link to="/cookie-policy" className="text-charcoal/70 text-sm hover:text-accent transition-colors block">Cookie Policy</Link>
+                                <Link to="/privacy" className="text-charcoal/70 text-sm hover:text-accent transition-colors block">Privacy Policy</Link>
                             </div>
                         </div>
                         <div className="flex items-start gap-3">

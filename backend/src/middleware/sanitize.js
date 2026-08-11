@@ -1,5 +1,10 @@
 import xss from "xss";
 
+// Credential fields must reach bcrypt/comparison byte-for-byte — HTML-entity
+// escaping them here would silently narrow the password charset and couple
+// stored hashes to this library's exact escaping behavior.
+const UNSANITIZED_FIELDS = new Set(["password", "current_password", "new_password"]);
+
 // Recursively sanitize all string values in an object
 const sanitizeValue = (value) => {
   if (typeof value === "string") {
@@ -17,7 +22,7 @@ const sanitizeValue = (value) => {
 const sanitizeObject = (obj) => {
   const sanitized = {};
   for (const key of Object.keys(obj)) {
-    sanitized[key] = sanitizeValue(obj[key]);
+    sanitized[key] = UNSANITIZED_FIELDS.has(key) ? obj[key] : sanitizeValue(obj[key]);
   }
   return sanitized;
 };

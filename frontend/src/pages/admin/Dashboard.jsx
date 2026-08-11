@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
-import { ClipboardList, DollarSign, TrendingUp, Clock, ShoppingBag, Users } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { ClipboardList, DollarSign, TrendingUp, Clock } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 import api from "../../services/api.js";
 import { useAdminAuth } from "../../context/AdminAuthContext.jsx";
+import AdminStatCard from "../../components/admin/AdminStatCard.jsx";
 
 const Dashboard = () => {
     const { admin } = useAdminAuth();
     const [summary, setSummary] = useState(null);
     const [dailyData, setDailyData] = useState([]);
+    const [previousDailyData, setPreviousDailyData] = useState([]);
     const [pendingOrders, setPendingOrders] = useState([]);
     const [loading, setLoading] = useState(true);
 
@@ -19,11 +21,12 @@ const Dashboard = () => {
         try {
             const [summaryRes, dailyRes, ordersRes] = await Promise.all([
                 api.get("/api/admin/analytics/summary"),
-                api.get("/api/admin/analytics/daily?days=7"),
+                api.get("/api/admin/analytics/daily?days=7&compare=true"),
                 api.get("/api/admin/orders?status=pending"),
             ]);
             setSummary(summaryRes.data);
             setDailyData(dailyRes.data.analytics || []);
+            setPreviousDailyData(dailyRes.data.previous_analytics || []);
             setPendingOrders(ordersRes.data.orders || []);
         } catch { } finally {
             setLoading(false);
@@ -38,11 +41,12 @@ const Dashboard = () => {
         );
     }
 
-    const chartData = dailyData.map(d => ({
+    const chartData = dailyData.map((d, idx) => ({
         date: new Date(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
         revenue: parseFloat(d.total_revenue),
         orders: parseInt(d.total_orders),
-    })).reverse();
+        prevRevenue: previousDailyData[idx] ? parseFloat(previousDailyData[idx].total_revenue) : null,
+    }));
 
     return (
         <div>
@@ -53,25 +57,28 @@ const Dashboard = () => {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-                <StatCard
+                <AdminStatCard
                     label="Today's Orders"
                     value={summary?.today?.total_orders || 0}
                     icon={<ClipboardList size={20} />}
                     color="bg-primary"
+                    trend={summary?.today?.orders_trend}
                 />
-                <StatCard
+                <AdminStatCard
                     label="Today's Revenue"
                     value={`₹${Math.round(parseFloat(summary?.today?.total_revenue || 0))}`}
                     icon={<DollarSign size={20} />}
                     color="bg-accent"
+                    trend={summary?.today?.revenue_trend}
                 />
-                <StatCard
+                <AdminStatCard
                     label="Weekly Revenue"
                     value={`₹${Math.round(parseFloat(summary?.this_week?.total_revenue || 0))}`}
                     icon={<TrendingUp size={20} />}
                     color="bg-primary"
+                    trend={summary?.this_week?.revenue_trend}
                 />
-                <StatCard
+                <AdminStatCard
                     label="Avg Order Value"
                     value={`₹${Math.round(parseFloat(summary?.today?.average_order_value || 0))}`}
                     icon={<Clock size={20} />}
@@ -81,7 +88,7 @@ const Dashboard = () => {
 
             {/* Revenue Chart */}
             <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-                <h2 className="text-lg font-semibold text-charcoal mb-4">Revenue (Last 7 Days)</h2>
+                <h2 className="text-lg font-semibold text-charcoal mb-4">Revenue (Last 7 Days vs Previous 7 Days)</h2>
                 {chartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={250}>
                         <LineChart data={chartData}>
@@ -90,9 +97,11 @@ const Dashboard = () => {
                             <YAxis tick={{ fontSize: 12 }} stroke="#999" />
                             <Tooltip
                                 contentStyle={{ borderRadius: '12px', border: '1px solid #eee' }}
-                                formatter={(value) => [`₹${value}`, 'Revenue']}
+                                formatter={(value, name) => [`₹${value}`, name === "revenue" ? "This period" : "Previous period"]}
                             />
+                            <Legend formatter={(value) => value === "revenue" ? "This period" : "Previous period"} />
                             <Line type="monotone" dataKey="revenue" stroke="#1a3c34" strokeWidth={2.5} dot={{ fill: '#e87a2e', r: 4 }} activeDot={{ r: 6 }} />
+                            <Line type="monotone" dataKey="prevRevenue" stroke="#999" strokeWidth={1.5} strokeDasharray="5 5" dot={false} />
                         </LineChart>
                     </ResponsiveContainer>
                 ) : (
@@ -136,17 +145,5 @@ const Dashboard = () => {
         </div>
     );
 };
-
-const StatCard = ({ label, value, icon, color }) => (
-    <div className="bg-white rounded-xl p-5 shadow-sm flex items-center justify-between">
-        <div>
-            <p className="text-charcoal/50 text-xs font-medium">{label}</p>
-            <p className="text-2xl font-bold text-charcoal mt-1">{value}</p>
-        </div>
-        <div className={`w-10 h-10 ${color} rounded-xl flex items-center justify-center text-white`}>
-            {icon}
-        </div>
-    </div>
-);
 
 export default Dashboard;

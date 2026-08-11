@@ -7,7 +7,6 @@ import { toast } from "sonner";
 const Profile = () => {
     const { user, checkAuth } = useAuth();
     const [name, setName] = useState(user?.name || "");
-    const [phone, setPhone] = useState(user?.phone || "");
     const [currentPassword, setCurrentPassword] = useState("");
     const [newPassword, setNewPassword] = useState("");
     const [savingProfile, setSavingProfile] = useState(false);
@@ -17,7 +16,7 @@ const Profile = () => {
         e.preventDefault();
         try {
             setSavingProfile(true);
-            await api.put("/api/profile", { name, phone });
+            await api.put("/api/profile", { name });
             await checkAuth();
             toast.success("Profile updated");
         } catch (error) {
@@ -78,15 +77,15 @@ const Profile = () => {
                             <p className="text-xs text-charcoal/40 mt-1">Email cannot be changed</p>
                         </div>
                         <div>
-                            <label htmlFor="profile-phone" className="block text-sm font-medium text-charcoal mb-1">Phone</label>
-                            <input
-                                id="profile-phone"
-                                type="tel"
-                                value={phone}
-                                onChange={(e) => setPhone(e.target.value)}
-                                required
-                                className="w-full px-4 py-3 rounded-lg border border-gray-200 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
-                            />
+                            <label className="block text-sm font-medium text-charcoal mb-1">Phone</label>
+                            <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-gray-50 border border-gray-100">
+                                <Phone size={16} className="text-gray-400" />
+                                <span className="text-charcoal/70">{user?.phone}</span>
+                                {user?.phone_verified && (
+                                    <span className="ml-auto text-xs font-medium text-green-600 bg-green-50 px-2 py-0.5 rounded-full">Verified</span>
+                                )}
+                            </div>
+                            <p className="text-xs text-charcoal/40 mt-1">Phone number cannot be changed — it's your verified identity</p>
                         </div>
                         <button
                             type="submit"

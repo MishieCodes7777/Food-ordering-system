@@ -37,6 +37,19 @@
   cursor: not-allowed;
 }
 
+.smooth-input-with-right-el {
+  padding-right: 2.75rem;
+}
+
+.smooth-input-right-el {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+}
+
 .smooth-input-underline {
   position: absolute;
   bottom: 0;

@@ -5,8 +5,13 @@ export const loginUser = async (email, password) => {
     return res.data;
 };
 
-export const registerUser = async (name, email, password, phone) => {
-    const res = await api.post("/api/auth/register", { name, email, password, phone });
+export const sendRegistrationOtp = async (name, email, password, phone) => {
+    const res = await api.post("/api/auth/register/send-otp", { name, email, password, phone });
+    return res.data;
+};
+
+export const verifyRegistrationOtp = async (phone, otp) => {
+    const res = await api.post("/api/auth/register/verify-otp", { phone, otp });
     return res.data;
 };
 

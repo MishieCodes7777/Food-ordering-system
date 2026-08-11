@@ -1,10 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Outlet } from "react-router-dom";
-import { Menu, X } from "lucide-react";
+import { Menu } from "lucide-react";
 import AdminSidebar from "./AdminSidebar.jsx";
 
 const AdminLayout = () => {
     const [sidebarOpen, setSidebarOpen] = useState(false);
+    const [collapsed, setCollapsed] = useState(() => localStorage.getItem("akio_admin_sidebar_collapsed") === "true");
+
+    useEffect(() => {
+        localStorage.setItem("akio_admin_sidebar_collapsed", String(collapsed));
+    }, [collapsed]);
 
     return (
         <div className="flex min-h-screen bg-cream">
@@ -18,11 +23,15 @@ const AdminLayout = () => {
 
             {/* Sidebar */}
             <div className={`fixed inset-y-0 left-0 z-40 transform transition-transform duration-200 lg:translate-x-0 ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
-                <AdminSidebar onClose={() => setSidebarOpen(false)} />
+                <AdminSidebar
+                    onClose={() => setSidebarOpen(false)}
+                    collapsed={collapsed}
+                    onToggleCollapse={() => setCollapsed((c) => !c)}
+                />
             </div>
 
             {/* Main Content */}
-            <main className="flex-1 lg:ml-64 p-4 sm:p-6">
+            <main className={`flex-1 ${collapsed ? "lg:ml-20" : "lg:ml-64"} p-4 sm:p-6 transition-all duration-200`}>
                 {/* Mobile header */}
                 <button
                     onClick={() => setSidebarOpen(true)}

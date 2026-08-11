@@ -10,6 +10,11 @@ export const getOrders = async () => {
     return res.data;
 };
 
+export const getRecentlyOrderedItems = async () => {
+    const res = await api.get("/api/orders/recent-items");
+    return res.data;
+};
+
 export const getOrderById = async (orderId) => {
     const res = await api.get(`/api/orders/${orderId}`);
     return res.data;

@@ -1,7 +1,7 @@
 import pool from "../db/db.js";
 
 // GET /api/admin/restaurant — Get the admin's restaurant profile
-export const getRestaurant = async (req, res) => {
+export const getRestaurant = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
 
@@ -13,12 +13,12 @@ export const getRestaurant = async (req, res) => {
 
         res.json({ restaurant: restaurant.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/restaurant — Update restaurant profile
-export const updateRestaurant = async (req, res) => {
+export const updateRestaurant = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const {
@@ -59,12 +59,12 @@ export const updateRestaurant = async (req, res) => {
 
         res.json({ message: "Restaurant updated", restaurant: updated.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/restaurant — Create a new restaurant (first-time setup)
-export const createRestaurant = async (req, res) => {
+export const createRestaurant = async (req, res, next) => {
     try {
         const {
             name, description, logo_url, banner_url, email, phone,
@@ -87,12 +87,12 @@ export const createRestaurant = async (req, res) => {
 
         res.status(201).json({ message: "Restaurant created", restaurant: newRestaurant.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/restaurant/toggle — Activate/deactivate restaurant
-export const toggleRestaurant = async (req, res) => {
+export const toggleRestaurant = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
 
@@ -111,6 +111,37 @@ export const toggleRestaurant = async (req, res) => {
 
         res.json({ message: `Restaurant ${newStatus ? "activated" : "deactivated"}`, is_active: newStatus });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
+    }
+};
+
+// GET /api/admin/restaurant/gst — Get GST settings
+export const getGstSettings = async (req, res, next) => {
+    try {
+        const restaurantId = req.admin.restaurant_id;
+        const result = await pool.query(
+            "SELECT gst_enabled, gst_percentage, gst_label FROM restaurants WHERE id = $1",
+            [restaurantId]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ message: "Restaurant not found" });
+        res.json({ gst: result.rows[0] });
+    } catch (error) {
+        next(error);
+    }
+};
+
+// PUT /api/admin/restaurant/gst — Update GST settings
+export const updateGstSettings = async (req, res, next) => {
+    try {
+        const restaurantId = req.admin.restaurant_id;
+        const { gst_enabled, gst_percentage, gst_label } = req.body;
+
+        await pool.query(
+            "UPDATE restaurants SET gst_enabled = $1, gst_percentage = $2, gst_label = $3, updated_at = NOW() WHERE id = $4",
+            [gst_enabled, gst_percentage || 0, gst_label || 'GST', restaurantId]
+        );
+        res.json({ message: "GST settings updated", gst: { gst_enabled, gst_percentage, gst_label } });
+    } catch (error) {
+        next(error);
     }
 };

@@ -1,68 +1,33 @@
-import { useState, useEffect } from "react";
 import { Plus, Pencil, Trash2, X } from "lucide-react";
-import api from "../../services/api.js";
 import { toast } from "sonner";
+import api from "../../services/api.js";
+import { useAdminCrud } from "../../hooks/useAdminCrud.js";
+
+const INITIAL_FORM = { table_number: "", table_name: "", capacity: "" };
+
+const toTableForm = (table) => ({
+    table_number: table.table_number,
+    table_name: table.table_name || "",
+    capacity: table.capacity || "",
+});
 
 const AdminTables = () => {
-    const [tables, setTables] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [showModal, setShowModal] = useState(false);
-    const [editing, setEditing] = useState(null);
-    const [form, setForm] = useState({ table_number: "", table_name: "", capacity: "" });
-
-    useEffect(() => { fetchTables(); }, []);
-
-    const fetchTables = async () => {
-        try {
-            const res = await api.get("/api/admin/tables");
-            setTables(res.data.tables || []);
-        } catch { } finally { setLoading(false); }
-    };
-
-    const openCreate = () => {
-        setEditing(null);
-        setForm({ table_number: "", table_name: "", capacity: "" });
-        setShowModal(true);
-    };
-
-    const openEdit = (table) => {
-        setEditing(table);
-        setForm({ table_number: table.table_number, table_name: table.table_name || "", capacity: table.capacity || "" });
-        setShowModal(true);
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const payload = {
-            table_number: parseInt(form.table_number),
-            table_name: form.table_name || undefined,
-            capacity: form.capacity ? parseInt(form.capacity) : undefined,
-        };
-        try {
-            if (editing) {
-                await api.put(`/api/admin/tables/${editing.id}`, payload);
-                toast.success("Table updated");
-            } else {
-                await api.post("/api/admin/tables", payload);
-                toast.success("Table created");
-            }
-            setShowModal(false);
-            fetchTables();
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Failed");
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if (!confirm("Delete this table?")) return;
-        try {
-            await api.delete(`/api/admin/tables/${id}`);
-            toast.success("Table deleted");
-            fetchTables();
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Failed");
-        }
-    };
+    const {
+        items: tables, loading, showModal, setShowModal, editing, form, setForm,
+        openCreate, openEdit, handleSubmit, handleDelete, fetchItems: fetchTables,
+    } = useAdminCrud({
+        endpoint: "/api/admin/tables",
+        listKey: "tables",
+        initialForm: INITIAL_FORM,
+        resourceLabel: "Table",
+        saveErrorMessage: "Failed",
+        deleteErrorMessage: "Failed",
+        transformPayload: (f) => ({
+            table_number: parseInt(f.table_number),
+            table_name: f.table_name || undefined,
+            capacity: f.capacity ? parseInt(f.capacity) : undefined,
+        }),
+    });
 
     const toggleTable = async (id) => {
         try {
@@ -105,7 +70,7 @@ const AdminTables = () => {
                                 >
                                     {table.is_active ? "Active" : "Disabled"}
                                 </button>
-                                <button onClick={() => openEdit(table)} className="text-charcoal/40 hover:text-primary"><Pencil size={14} /></button>
+                                <button onClick={() => openEdit(table, toTableForm)} className="text-charcoal/40 hover:text-primary"><Pencil size={14} /></button>
                                 <button onClick={() => handleDelete(table.id)} className="text-charcoal/40 hover:text-red-500"><Trash2 size={14} /></button>
                             </div>
                         </div>

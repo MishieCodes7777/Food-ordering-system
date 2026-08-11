@@ -1,16 +1,18 @@
 import { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, Calendar } from "lucide-react";
+import { ChevronLeft, ChevronRight, Calendar, TrendingUp, Wallet, DollarSign } from "lucide-react";
 import {
     LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from "recharts";
 import api from "../../services/api.js";
+import AdminStatCard from "../../components/admin/AdminStatCard.jsx";
 
 const COLORS = ['#1a3c34', '#e87a2e', '#2d5c4f', '#c55f1a', '#0f2620'];
 
 const AdminAnalytics = () => {
     const [summary, setSummary] = useState(null);
     const [dailyData, setDailyData] = useState([]);
+    const [previousDailyData, setPreviousDailyData] = useState([]);
     const [popularItems, setPopularItems] = useState([]);
     const [revenueBreakdown, setRevenueBreakdown] = useState([]);
     const [selectedMonth, setSelectedMonth] = useState(new Date());
@@ -25,12 +27,13 @@ const AdminAnalytics = () => {
         try {
             const [summaryRes, dailyRes, popularRes, revenueRes] = await Promise.all([
                 api.get("/api/admin/analytics/summary"),
-                api.get("/api/admin/analytics/daily?days=30"),
+                api.get("/api/admin/analytics/daily?days=30&compare=true"),
                 api.get("/api/admin/analytics/popular-items?limit=5"),
                 api.get("/api/admin/analytics/revenue"),
             ]);
             setSummary(summaryRes.data);
             setDailyData(dailyRes.data.analytics || []);
+            setPreviousDailyData(dailyRes.data.previous_analytics || []);
             setPopularItems(popularRes.data.popular_items || []);
             setRevenueBreakdown(revenueRes.data.revenue_breakdown || []);
         } catch { } finally {
@@ -48,24 +51,39 @@ const AdminAnalytics = () => {
         setSelectedMonth(newDate);
     };
 
+    // Builds a plain "YYYY-MM-DD" key from a Date's own local year/month/day —
+    // deliberately NOT date.toISOString(), which converts through UTC and
+    // shifts the date backward by a day in any timezone ahead of UTC (e.g.
+    // IST). Matches the backend's TO_CHAR(created_at, 'YYYY-MM-DD') format,
+    // so this stays correct regardless of what timezone the server runs in.
+    const toDateKey = (date) =>
+        `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
+    // Parses a "YYYY-MM-DD" string as a local date, not UTC midnight — avoids
+    // the same class of off-by-one shift when displaying it back.
+    const parseDateKey = (dateStr) => {
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    };
+
     const getRevenueForDate = (date) => {
-        const dateStr = date.toISOString().split('T')[0];
-        const day = dailyData.find(d => d.date?.startsWith(dateStr));
+        const day = dailyData.find(d => d.date === toDateKey(date));
         return day ? parseFloat(day.total_revenue) : 0;
     };
 
     const getOrdersForDate = (date) => {
-        const dateStr = date.toISOString().split('T')[0];
-        const day = dailyData.find(d => d.date?.startsWith(dateStr));
+        const day = dailyData.find(d => d.date === toDateKey(date));
         return day ? parseInt(day.total_orders) : 0;
     };
 
-    // Chart data
-    const lineChartData = dailyData.map(d => ({
-        date: new Date(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
+    // Chart data — backend already returns both series oldest-to-newest and
+    // equal length, so we can zip current[i] with previous[i] by index
+    // ("day i of this period" vs "day i of the prior period").
+    const lineChartData = dailyData.map((d, idx) => ({
+        date: parseDateKey(d.date).toLocaleDateString("en-IN", { day: "numeric", month: "short" }),
         revenue: Math.round(parseFloat(d.total_revenue)),
-        orders: parseInt(d.total_orders),
-    })).reverse();
+        prevRevenue: previousDailyData[idx] ? Math.round(parseFloat(previousDailyData[idx].total_revenue)) : null,
+    }));
 
     const pieData = revenueBreakdown.map(r => ({
         name: r.payment_status,
@@ -98,26 +116,32 @@ const AdminAnalytics = () => {
 
             {/* Summary cards */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div className="bg-white rounded-xl p-5 shadow-sm">
-                    <p className="text-charcoal/50 text-xs">This Month</p>
-                    <p className="text-2xl font-bold text-charcoal mt-1">₹{Math.round(parseFloat(summary?.this_month?.total_revenue || 0))}</p>
-                    <p className="text-xs text-charcoal/40 mt-1">{summary?.this_month?.total_orders || 0} orders</p>
-                </div>
-                <div className="bg-white rounded-xl p-5 shadow-sm">
-                    <p className="text-charcoal/50 text-xs">This Week</p>
-                    <p className="text-2xl font-bold text-charcoal mt-1">₹{Math.round(parseFloat(summary?.this_week?.total_revenue || 0))}</p>
-                    <p className="text-xs text-charcoal/40 mt-1">{summary?.this_week?.total_orders || 0} orders</p>
-                </div>
-                <div className="bg-white rounded-xl p-5 shadow-sm">
-                    <p className="text-charcoal/50 text-xs">Today</p>
-                    <p className="text-2xl font-bold text-primary mt-1">₹{Math.round(parseFloat(summary?.today?.total_revenue || 0))}</p>
-                    <p className="text-xs text-charcoal/40 mt-1">{summary?.today?.total_orders || 0} orders</p>
-                </div>
+                <AdminStatCard
+                    label="This Month"
+                    value={`₹${Math.round(parseFloat(summary?.this_month?.total_revenue || 0))}`}
+                    icon={<Wallet size={20} />}
+                    color="bg-charcoal"
+                    trend={summary?.this_month?.revenue_trend}
+                />
+                <AdminStatCard
+                    label="This Week"
+                    value={`₹${Math.round(parseFloat(summary?.this_week?.total_revenue || 0))}`}
+                    icon={<TrendingUp size={20} />}
+                    color="bg-primary"
+                    trend={summary?.this_week?.revenue_trend}
+                />
+                <AdminStatCard
+                    label="Today"
+                    value={`₹${Math.round(parseFloat(summary?.today?.total_revenue || 0))}`}
+                    icon={<DollarSign size={20} />}
+                    color="bg-accent"
+                    trend={summary?.today?.revenue_trend}
+                />
             </div>
 
             {/* Revenue Line Chart */}
             <div className="bg-white rounded-2xl p-6 shadow-sm mb-6">
-                <h2 className="text-lg font-semibold text-charcoal mb-4">Revenue Trend (30 Days)</h2>
+                <h2 className="text-lg font-semibold text-charcoal mb-4">Revenue Trend (30 Days vs Previous 30 Days)</h2>
                 {lineChartData.length > 0 ? (
                     <ResponsiveContainer width="100%" height={280}>
                         <LineChart data={lineChartData}>
@@ -125,8 +149,8 @@ const AdminAnalytics = () => {
                             <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#999" />
                             <YAxis tick={{ fontSize: 11 }} stroke="#999" />
                             <Tooltip contentStyle={{ borderRadius: '12px', border: '1px solid #eee' }} />
-                            <Line type="monotone" dataKey="revenue" stroke="#1a3c34" strokeWidth={2.5} dot={{ fill: '#e87a2e', r: 3 }} name="Revenue (₹)" />
-                            <Line type="monotone" dataKey="orders" stroke="#e87a2e" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Orders" />
+                            <Line type="monotone" dataKey="revenue" stroke="#1a3c34" strokeWidth={2.5} dot={{ fill: '#e87a2e', r: 3 }} name="This period (₹)" />
+                            <Line type="monotone" dataKey="prevRevenue" stroke="#999" strokeWidth={1.5} strokeDasharray="4 4" dot={false} name="Previous period (₹)" />
                             <Legend />
                         </LineChart>
                     </ResponsiveContainer>

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import pool from "../db/db.js";
+import logger from "../utils/logger.js";
 
 // POST /api/webhooks/razorpay — Razorpay sends payment events here
 export const handleRazorpayWebhook = async (req, res) => {
@@ -15,15 +16,21 @@ export const handleRazorpayWebhook = async (req, res) => {
       .update(body)
       .digest("hex");
 
-    if (signature !== expectedSignature) {
-      console.error("[WEBHOOK] Invalid signature — rejected");
+    const signatureBuffer = Buffer.from(signature || "", "hex");
+    const expectedBuffer = Buffer.from(expectedSignature, "hex");
+    const signatureValid =
+      signatureBuffer.length === expectedBuffer.length &&
+      crypto.timingSafeEqual(signatureBuffer, expectedBuffer);
+
+    if (!signatureValid) {
+      logger.error({ requestId: req.id }, "[WEBHOOK] Invalid signature — rejected");
       return res.status(400).json({ message: "Invalid signature" });
     }
 
     const event = JSON.parse(body);
     const eventType = event.event;
 
-    console.log(`[WEBHOOK] Received: ${eventType}`);
+    logger.info({ requestId: req.id, eventType }, "[WEBHOOK] Received");
 
     // Handle payment captured (successful payment)
     if (eventType === "payment.captured") {
@@ -50,7 +57,7 @@ export const handleRazorpayWebhook = async (req, res) => {
         // Order stays pending — admin controls status manually
         // Payment captured is recorded but order status stays as-is
 
-        console.log(`[WEBHOOK] Payment captured for Order #${orderId} — ₹${amount}`);
+        logger.info({ requestId: req.id, orderId, amount }, "[WEBHOOK] Payment captured");
       }
     }
 
@@ -70,7 +77,7 @@ export const handleRazorpayWebhook = async (req, res) => {
           [existingPayment.rows[0].id]
         );
 
-        console.log(`[WEBHOOK] Payment failed for Order #${existingPayment.rows[0].order_id}`);
+        logger.info({ requestId: req.id, orderId: existingPayment.rows[0].order_id }, "[WEBHOOK] Payment failed");
       }
     }
 
@@ -84,13 +91,13 @@ export const handleRazorpayWebhook = async (req, res) => {
         [paymentId]
       );
 
-      console.log(`[WEBHOOK] Refund processed for payment ${paymentId}`);
+      logger.info({ requestId: req.id, razorpayPaymentId: paymentId }, "[WEBHOOK] Refund processed");
     }
 
     // Always respond 200 so Razorpay knows we received it
     res.status(200).json({ received: true });
   } catch (error) {
-    console.error("[WEBHOOK] Error:", error.message);
+    logger.error({ requestId: req.id, err: { message: error.message, stack: error.stack } }, "[WEBHOOK] Processing error");
     // Still return 200 to prevent Razorpay from retrying
     res.status(200).json({ received: true });
   }

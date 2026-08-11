@@ -1,13 +1,21 @@
 import { Link } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { ArrowRight, Users, Star, ChefHat, Leaf, Clock, Sparkles } from "lucide-react";
+import { ArrowRight, Users, Star, ChefHat, Leaf, Clock, Sparkles, Plus, Minus, RotateCcw } from "lucide-react";
 import SplitText from "../components/SplitText.jsx";
 import Counter from "../components/Counter.jsx";
 import Onboarding from "../components/Onboarding.jsx";
 import api from "../services/api.js";
+import { useAuth } from "../context/AuthContext.jsx";
+import { useCart } from "../context/CartContext.jsx";
+import { getRecentlyOrderedItems } from "../services/orderService.js";
+import { toast } from "sonner";
 
 const Home = () => {
+    const { user } = useAuth();
+    const { addToCart, updateItem, removeItem, cartItems } = useCart();
     const [featuredItems, setFeaturedItems] = useState([]);
+    const [recentItems, setRecentItems] = useState([]);
+    const [addingItemId, setAddingItemId] = useState(null);
     const [showOnboarding, setShowOnboarding] = useState(false);
 
     useEffect(() => {
@@ -25,9 +33,81 @@ const Home = () => {
         fetchFeatured();
     }, []);
 
+    useEffect(() => {
+        // Only customers who've placed at least one qualifying order get
+        // anything back here — an empty result naturally hides the section
+        // rather than needing a separate "has ordered before" flag.
+        if (!user) {
+            setRecentItems([]);
+            return;
+        }
+        const fetchRecent = async () => {
+            try {
+                const data = await getRecentlyOrderedItems();
+                setRecentItems(data.items || []);
+            } catch { }
+        };
+        fetchRecent();
+    }, [user]);
+
     const handleOnboardingComplete = () => {
         setShowOnboarding(false);
         localStorage.removeItem('akio_show_onboarding');
+    };
+
+    const getCartQuantity = (menuItemId) => {
+        const cartItem = cartItems.find((ci) => ci.menu_item_id === menuItemId);
+        return cartItem ? cartItem.quantity : 0;
+    };
+
+    const getCartItemId = (menuItemId) => {
+        const cartItem = cartItems.find((ci) => ci.menu_item_id === menuItemId);
+        return cartItem ? cartItem.id : null;
+    };
+
+    const handleAddToCart = async (itemId) => {
+        if (!user) {
+            toast.error("Please login to add items");
+            return;
+        }
+        try {
+            setAddingItemId(itemId);
+            await addToCart(itemId, 1);
+            toast.success("Added to cart!");
+        } catch {
+            toast.error("Couldn't add to cart");
+        } finally {
+            setAddingItemId(null);
+        }
+    };
+
+    const handleIncrement = async (menuItemId) => {
+        try {
+            setAddingItemId(menuItemId);
+            await addToCart(menuItemId, 1);
+        } catch {
+            toast.error("Couldn't update");
+        } finally {
+            setAddingItemId(null);
+        }
+    };
+
+    const handleDecrement = async (menuItemId) => {
+        const cartItemId = getCartItemId(menuItemId);
+        const qty = getCartQuantity(menuItemId);
+        if (!cartItemId) return;
+        try {
+            setAddingItemId(menuItemId);
+            if (qty <= 1) {
+                await removeItem(cartItemId);
+            } else {
+                await updateItem(cartItemId, qty - 1);
+            }
+        } catch {
+            toast.error("Couldn't update");
+        } finally {
+            setAddingItemId(null);
+        }
     };
 
     return (
@@ -129,6 +209,85 @@ const Home = () => {
                     </svg>
                 </div>
             </section>
+
+            {/* Recently Ordered — only shown once the customer has a qualifying order */}
+            {recentItems.length > 0 && (
+                <section className="py-16 bg-white">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <div className="text-center mb-12">
+                            <span className="bg-accent/10 text-accent px-4 py-1 rounded-full text-sm font-medium flex items-center gap-1.5 w-fit mx-auto">
+                                <RotateCcw size={14} /> Recently Ordered
+                            </span>
+                            <h2 className="text-3xl md:text-4xl font-bold text-charcoal mt-4">
+                                Order your favorites again
+                            </h2>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                            {recentItems.map((item) => (
+                                <div key={item.id} className="bg-cream rounded-2xl p-4 flex flex-col shadow-sm">
+                                    <div className="w-full h-28 rounded-xl overflow-hidden bg-white mb-3">
+                                        {item.image_url ? (
+                                            <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center text-4xl">🍽️</div>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <h3 className="font-semibold text-charcoal text-sm flex-1 truncate">{item.name}</h3>
+                                        {item.is_veg ? (
+                                            <span className="w-3.5 h-3.5 border-2 border-green-600 rounded-sm flex items-center justify-center flex-shrink-0"><span className="w-1.5 h-1.5 bg-green-600 rounded-full"></span></span>
+                                        ) : (
+                                            <span className="w-3.5 h-3.5 border-2 border-red-600 rounded-sm flex items-center justify-center flex-shrink-0"><span className="w-1.5 h-1.5 bg-red-600 rounded-full"></span></span>
+                                        )}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        {item.discount_price && parseFloat(item.discount_price) < parseFloat(item.price) ? (
+                                            <>
+                                                <span className="font-bold text-accent text-sm">₹{item.discount_price}</span>
+                                                <span className="text-charcoal/40 text-xs line-through">₹{item.price}</span>
+                                            </>
+                                        ) : (
+                                            <span className="font-bold text-accent text-sm">₹{item.price}</span>
+                                        )}
+                                    </div>
+
+                                    <div className="mt-3">
+                                        {getCartQuantity(item.id) > 0 ? (
+                                            <div className="flex items-center justify-center gap-2 bg-white rounded-full py-1.5">
+                                                <button
+                                                    onClick={() => handleDecrement(item.id)}
+                                                    disabled={addingItemId === item.id}
+                                                    className="w-7 h-7 rounded-full bg-cream flex items-center justify-center hover:bg-accent hover:text-white transition-all disabled:opacity-50"
+                                                    aria-label="Decrease"
+                                                >
+                                                    <Minus size={14} />
+                                                </button>
+                                                <span className="w-6 text-center font-semibold text-charcoal text-sm">{getCartQuantity(item.id)}</span>
+                                                <button
+                                                    onClick={() => handleIncrement(item.id)}
+                                                    disabled={addingItemId === item.id}
+                                                    className="w-7 h-7 rounded-full bg-accent text-white flex items-center justify-center hover:bg-accent-dark transition-all disabled:opacity-50"
+                                                    aria-label="Increase"
+                                                >
+                                                    <Plus size={14} />
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleAddToCart(item.id)}
+                                                disabled={addingItemId === item.id}
+                                                className="w-full bg-accent hover:bg-accent-dark text-white py-2 rounded-full text-sm font-medium flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                                            >
+                                                <Plus size={14} /> Add
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </section>
+            )}
 
             {/* Popular Menu Section */}
             <section className="py-16">

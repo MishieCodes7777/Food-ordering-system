@@ -1,7 +1,7 @@
 import pool from "../db/db.js";
 
 // GET /api/admin/tables — Get all tables for the restaurant
-export const getTables = async (req, res) => {
+export const getTables = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
 
@@ -12,12 +12,12 @@ export const getTables = async (req, res) => {
 
         res.json({ tables: tables.rows });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // GET /api/admin/tables/:id — Get single table
-export const getTableById = async (req, res) => {
+export const getTableById = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const tableId = parseInt(req.params.id);
@@ -37,12 +37,12 @@ export const getTableById = async (req, res) => {
 
         res.json({ table: table.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/tables — Create a new table
-export const createTable = async (req, res) => {
+export const createTable = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const { table_number, table_name, capacity, is_active } = req.body;
@@ -66,12 +66,12 @@ export const createTable = async (req, res) => {
 
         res.status(201).json({ message: "Table created", table: newTable.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/tables/:id — Update a table
-export const updateTable = async (req, res) => {
+export const updateTable = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const tableId = parseInt(req.params.id);
@@ -113,12 +113,12 @@ export const updateTable = async (req, res) => {
 
         res.json({ message: "Table updated", table: updated.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // DELETE /api/admin/tables/:id — Delete a table
-export const deleteTable = async (req, res) => {
+export const deleteTable = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const tableId = parseInt(req.params.id);
@@ -138,12 +138,12 @@ export const deleteTable = async (req, res) => {
 
         res.json({ message: "Table deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/tables/:id/toggle — Enable/disable table
-export const toggleTable = async (req, res) => {
+export const toggleTable = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const tableId = parseInt(req.params.id);
@@ -164,12 +164,12 @@ export const toggleTable = async (req, res) => {
         const newStatus = !current.rows[0].is_active;
 
         await pool.query(
-            "UPDATE restaurant_tables SET is_active = $1, updated_at = NOW() WHERE id = $2",
-            [newStatus, tableId]
+            "UPDATE restaurant_tables SET is_active = $1, updated_at = NOW() WHERE id = $2 AND restaurant_id = $3",
+            [newStatus, tableId, restaurantId]
         );
 
         res.json({ message: `Table ${newStatus ? "enabled" : "disabled"}`, is_active: newStatus });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
