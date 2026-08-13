@@ -4,6 +4,13 @@ A full-stack food ordering application: a customer-facing storefront, a role-bas
 
 The app is currently **single-restaurant in practice** — the schema is shaped for multi-tenancy (`restaurant_id` on most tables), but the frontend has no restaurant-selection UX; public queries always scope to the one active restaurant.
 
+## Live Demo
+
+- **App:** [food-ordering-system-five-pi.vercel.app](https://food-ordering-system-five-pi.vercel.app)
+- **API:** [akio-backend-pwqd.onrender.com](https://akio-backend-pwqd.onrender.com)
+
+Hosted on free tiers (Vercel + Render) for demo purposes — the backend spins down after inactivity, so the first request after a quiet period can take up to ~50 seconds to wake up.
+
 ## Screenshots
 
 | | |
