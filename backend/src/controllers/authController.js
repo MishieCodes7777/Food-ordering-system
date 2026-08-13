@@ -44,8 +44,10 @@ export const sendRegistrationOtp = async (req, res, next) => {
       message: "OTP sent to your mobile number",
       // Dev convenience only: surfaces the OTP in the response when no real
       // SMS provider is configured, so the flow is testable without reading
-      // server logs. Never happens once MSG91 credentials are set.
-      ...(process.env.NODE_ENV !== "production" && !process.env.MSG91_AUTH_KEY ? { dev_otp: otp } : {}),
+      // server logs. Never happens once MSG91 credentials are set — this is
+      // deliberately keyed off MSG91 config, not NODE_ENV, so it still works
+      // on a production deploy that hasn't set up MSG91 yet.
+      ...(!process.env.MSG91_AUTH_KEY ? { dev_otp: otp } : {}),
     });
   } catch (error) {
     next(error);
