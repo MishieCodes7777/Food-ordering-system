@@ -4,6 +4,17 @@ A full-stack food ordering application: a customer-facing storefront, a role-bas
 
 The app is currently **single-restaurant in practice** — the schema is shaped for multi-tenancy (`restaurant_id` on most tables), but the frontend has no restaurant-selection UX; public queries always scope to the one active restaurant.
 
+## Screenshots
+
+| | |
+|---|---|
+| **Home** | **Menu** |
+| ![Home page](screenshots/home.png) | ![Menu page](screenshots/menu.png) |
+| **Cart & Bill Summary** | **Checkout (Razorpay)** |
+| ![Cart page](screenshots/cart.png) | ![Razorpay checkout](screenshots/payment.png) |
+| **Admin Dashboard** | **Admin Ledger** |
+| ![Admin dashboard](screenshots/admin-dashboard.png) | ![Admin ledger](screenshots/admin-ledger.png) |
+
 ## Tech Stack
 
 **Backend:** Node.js, Express 5, PostgreSQL, Redis (optional, `ioredis`), JWT, Razorpay, Google OAuth, MSG91 (SMS/OTP), Zod, Cloudinary, Pino
