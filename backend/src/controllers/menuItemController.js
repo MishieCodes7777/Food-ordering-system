@@ -1,7 +1,7 @@
 import pool from "../db/db.js";
 
 // GET /api/admin/menu-items — Get all menu items for the restaurant
-export const getMenuItems = async (req, res) => {
+export const getMenuItems = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
 
@@ -21,18 +21,21 @@ export const getMenuItems = async (req, res) => {
             params.push(categoryId);
         }
 
-        query += " ORDER BY mi.display_order ASC, mi.created_at DESC";
+        // Defensive cap, not real pagination — admins manage their whole catalog
+        // at once in this UI, so paging it would hurt the workflow for no benefit
+        // at this app's realistic scale.
+        query += " ORDER BY mi.display_order ASC, mi.created_at DESC LIMIT 500";
 
         const items = await pool.query(query, params);
 
         res.json({ menu_items: items.rows });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // GET /api/admin/menu-items/:id — Get single menu item with images
-export const getMenuItemById = async (req, res) => {
+export const getMenuItemById = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -61,12 +64,12 @@ export const getMenuItemById = async (req, res) => {
 
         res.json({ menu_item: item.rows[0], images: images.rows });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/menu-items — Create a new menu item
-export const createMenuItem = async (req, res) => {
+export const createMenuItem = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const {
@@ -99,12 +102,12 @@ export const createMenuItem = async (req, res) => {
 
         res.status(201).json({ message: "Menu item created", menu_item: newItem.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/menu-items/:id — Update a menu item
-export const updateMenuItem = async (req, res) => {
+export const updateMenuItem = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -159,12 +162,12 @@ export const updateMenuItem = async (req, res) => {
 
         res.json({ message: "Menu item updated", menu_item: updated.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // DELETE /api/admin/menu-items/:id — Delete a menu item
-export const deleteMenuItem = async (req, res) => {
+export const deleteMenuItem = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -184,12 +187,12 @@ export const deleteMenuItem = async (req, res) => {
 
         res.json({ message: "Menu item deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/menu-items/:id/availability — Toggle availability
-export const toggleAvailability = async (req, res) => {
+export const toggleAvailability = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -210,18 +213,18 @@ export const toggleAvailability = async (req, res) => {
         const newStatus = !current.rows[0].is_available;
 
         await pool.query(
-            "UPDATE menu_items SET is_available = $1, updated_at = NOW() WHERE id = $2",
-            [newStatus, itemId]
+            "UPDATE menu_items SET is_available = $1, updated_at = NOW() WHERE id = $2 AND restaurant_id = $3",
+            [newStatus, itemId, restaurantId]
         );
 
         res.json({ message: `Item marked as ${newStatus ? "available" : "unavailable"}`, is_available: newStatus });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/menu-items/:id/featured — Toggle featured status
-export const toggleFeatured = async (req, res) => {
+export const toggleFeatured = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -242,18 +245,18 @@ export const toggleFeatured = async (req, res) => {
         const newStatus = !current.rows[0].is_featured;
 
         await pool.query(
-            "UPDATE menu_items SET is_featured = $1, updated_at = NOW() WHERE id = $2",
-            [newStatus, itemId]
+            "UPDATE menu_items SET is_featured = $1, updated_at = NOW() WHERE id = $2 AND restaurant_id = $3",
+            [newStatus, itemId, restaurantId]
         );
 
         res.json({ message: `Item ${newStatus ? "added to" : "removed from"} featured`, is_featured: newStatus });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/menu-items/:id/images — Add image to menu item
-export const addMenuItemImage = async (req, res) => {
+export const addMenuItemImage = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -280,12 +283,12 @@ export const addMenuItemImage = async (req, res) => {
 
         res.status(201).json({ message: "Image added", image: newImage.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // DELETE /api/admin/menu-items/:id/images/:imageId — Remove image from menu item
-export const removeMenuItemImage = async (req, res) => {
+export const removeMenuItemImage = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const itemId = parseInt(req.params.id);
@@ -316,6 +319,6 @@ export const removeMenuItemImage = async (req, res) => {
 
         res.json({ message: "Image removed" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };

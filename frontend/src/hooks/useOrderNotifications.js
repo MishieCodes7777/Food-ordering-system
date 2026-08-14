@@ -1,85 +1,63 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback } from "react";
+import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext.jsx";
-import api from "../services/api.js";
+import { usePollingNotifications } from "./usePollingNotifications.js";
+
+const STATUS_MESSAGES = {
+    ready: (id) => `Your order #${id} is ready for pickup! 🎉`,
+    confirmed: (id) => `Your order #${id} has been confirmed ✓`,
+    preparing: (id) => `Your order #${id} is being prepared 🍳`,
+    completed: (id) => `Your order #${id} is complete. Enjoy! 😊`,
+};
+
+// seenRef.current maps orderId -> last known status
+const createSeenState = () => ({});
 
 const useOrderNotifications = () => {
     const { user } = useAuth();
-    const [notifications, setNotifications] = useState([]);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const previousStatuses = useRef({});
-    const intervalRef = useRef(null);
 
-    useEffect(() => {
-        if (user) {
-            // Initial fetch
-            checkOrderStatuses();
-            // Poll every 15 seconds
-            intervalRef.current = setInterval(checkOrderStatuses, 15000);
-        } else {
-            setNotifications([]);
-            setUnreadCount(0);
-            previousStatuses.current = {};
-        }
+    const buildNotifications = useCallback((orders, seenRef) => {
+        const fresh = [];
 
-        return () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-        };
-    }, [user]);
+        for (const order of orders) {
+            const prevStatus = seenRef.current[order.id];
 
-    const checkOrderStatuses = async () => {
-        try {
-            const res = await api.get("/api/orders");
-            const orders = res.data.orders || [];
+            // Only notify on meaningful transitions
+            if (prevStatus && prevStatus !== order.status) {
+                const message = STATUS_MESSAGES[order.status]?.(order.id);
+                if (message) {
+                    fresh.push({
+                        id: `${order.id}-${order.status}-${Date.now()}`,
+                        orderId: order.id,
+                        message,
+                        status: order.status,
+                        time: new Date(),
+                        read: false,
+                    });
 
-            for (const order of orders) {
-                const prevStatus = previousStatuses.current[order.id];
-
-                // Only notify on meaningful transitions
-                if (prevStatus && prevStatus !== order.status) {
-                    let message = null;
-
+                    // "Ready" is the one status a customer actively needs to act
+                    // on (go collect it) — surface it as a toast, not just a
+                    // badge count the customer might not notice in time.
                     if (order.status === "ready") {
-                        message = `Your order #${order.id} is ready for pickup! 🎉`;
-                    } else if (order.status === "confirmed") {
-                        message = `Your order #${order.id} has been confirmed ✓`;
-                    } else if (order.status === "preparing") {
-                        message = `Your order #${order.id} is being prepared 🍳`;
-                    } else if (order.status === "completed") {
-                        message = `Your order #${order.id} is complete. Enjoy! 😊`;
-                    }
-
-                    if (message) {
-                        const newNotification = {
-                            id: `${order.id}-${order.status}-${Date.now()}`,
-                            orderId: order.id,
-                            message,
-                            status: order.status,
-                            time: new Date(),
-                            read: false,
-                        };
-                        setNotifications((prev) => [newNotification, ...prev].slice(0, 20));
-                        setUnreadCount((prev) => prev + 1);
+                        toast.success(message, { duration: 8000 });
                     }
                 }
-
-                previousStatuses.current[order.id] = order.status;
             }
-        } catch {
-            // Silently fail — don't break the app
+
+            seenRef.current[order.id] = order.status;
         }
-    };
 
-    const markAllRead = () => {
-        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-        setUnreadCount(0);
-    };
+        return fresh;
+    }, []);
 
-    const clearNotifications = () => {
-        setNotifications([]);
-        setUnreadCount(0);
-    };
-
-    return { notifications, unreadCount, markAllRead, clearNotifications };
+    return usePollingNotifications({
+        enabled: !!user,
+        endpoint: "/api/orders",
+        intervalMs: 15000,
+        maxNotifications: 20,
+        createSeenState,
+        buildNotifications,
+    });
 };
 
 export default useOrderNotifications;

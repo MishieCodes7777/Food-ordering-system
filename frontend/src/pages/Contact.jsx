@@ -7,12 +7,15 @@ const Contact = () => {
     const [email, setEmail] = useState("");
     const [message, setMessage] = useState("");
 
+    // There's no backend endpoint to receive this message, so rather than
+    // faking a "Message sent!" success, this opens the user's own email
+    // client with the message pre-filled — honest about what actually happens.
     const handleSubmit = (e) => {
         e.preventDefault();
-        toast.success("Message sent! We'll get back to you soon.");
-        setName("");
-        setEmail("");
-        setMessage("");
+        const subject = encodeURIComponent(`Message from ${name}`);
+        const body = encodeURIComponent(`${message}\n\n— ${name} (${email})`);
+        window.location.href = `mailto:hello@akio.com?subject=${subject}&body=${body}`;
+        toast("Opening your email app to send this...", { duration: 4000 });
     };
 
     return (

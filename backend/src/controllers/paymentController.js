@@ -1,22 +1,17 @@
 import crypto from "crypto";
-import Razorpay from "razorpay";
 import pool from "../db/db.js";
-
-// Initialize Razorpay instance
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
+import razorpay from "../config/razorpay.js";
+import logger from "../utils/logger.js";
 
 // POST /api/payments/create-order — Create Razorpay order for a placed order
-export const createPaymentOrder = async (req, res) => {
+export const createPaymentOrder = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { order_id } = req.body;
 
     // Verify the order exists and belongs to this user
     const order = await pool.query(
-      "SELECT * FROM orders WHERE id = $1 AND user_id = $2",
+      "SELECT id, status, total_amount FROM orders WHERE id = $1 AND user_id = $2",
       [order_id, userId]
     );
 
@@ -67,13 +62,13 @@ export const createPaymentOrder = async (req, res) => {
       key_id: process.env.RAZORPAY_KEY_ID,
     });
   } catch (error) {
-    console.error("[PAYMENT CREATE ERROR]:", error.message);
-    res.status(500).json({ message: "Payment setup failed", error: error.message });
+    logger.error({ requestId: req.id, orderId: req.body?.order_id, userId: req.user?.id, err: { message: error.message } }, "[PAYMENT CREATE ERROR]");
+    next(error);
   }
 };
 
 // POST /api/payments/verify — Verify Razorpay payment signature (called after frontend payment)
-export const verifyPayment = async (req, res) => {
+export const verifyPayment = async (req, res, next) => {
   const client = await pool.connect();
 
   try {
@@ -86,7 +81,13 @@ export const verifyPayment = async (req, res) => {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest("hex");
 
-    if (generatedSignature !== razorpay_signature) {
+    const providedBuffer = Buffer.from(razorpay_signature || "", "hex");
+    const generatedBuffer = Buffer.from(generatedSignature, "hex");
+    const signatureValid =
+      providedBuffer.length === generatedBuffer.length &&
+      crypto.timingSafeEqual(providedBuffer, generatedBuffer);
+
+    if (!signatureValid) {
       return res.status(400).json({ message: "Payment verification failed. Invalid signature." });
     }
 
@@ -94,7 +95,7 @@ export const verifyPayment = async (req, res) => {
 
     // Verify order belongs to user
     const order = await client.query(
-      "SELECT * FROM orders WHERE id = $1 AND user_id = $2",
+      "SELECT id FROM orders WHERE id = $1 AND user_id = $2",
       [order_id, userId]
     );
 
@@ -117,14 +118,14 @@ export const verifyPayment = async (req, res) => {
     res.json({ message: "Payment verified and order confirmed", order_id });
   } catch (error) {
     await client.query("ROLLBACK");
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   } finally {
     client.release();
   }
 };
 
 // GET /api/payments/:orderId — Get payment status for an order
-export const getPaymentStatus = async (req, res) => {
+export const getPaymentStatus = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const orderId = parseInt(req.params.orderId);
@@ -154,41 +155,56 @@ export const getPaymentStatus = async (req, res) => {
 
     res.json({ payment: payment.rows[0] });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   }
 };
 
 // POST /api/payments/refund — Refund a completed payment (for cancelled orders)
-export const refundPayment = async (req, res) => {
+export const refundPayment = async (req, res, next) => {
   const client = await pool.connect();
 
   try {
     const userId = req.user.id;
     const { order_id } = req.body;
 
-    // Verify order belongs to user
+    await client.query("BEGIN");
+
+    // Verify order belongs to user — locked so a concurrent cancel/refund
+    // request on the same order blocks until this commits
     const order = await client.query(
-      "SELECT * FROM orders WHERE id = $1 AND user_id = $2",
+      "SELECT id, status FROM orders WHERE id = $1 AND user_id = $2 FOR UPDATE",
       [order_id, userId]
     );
 
     if (order.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ message: "Order not found" });
     }
 
-    // Get completed payment
+    // Only pending (not yet accepted/prepared/delivered) orders can be self-refunded
+    if (order.rows[0].status !== "pending") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({
+        message: `Cannot refund order with status '${order.rows[0].status}'. Only pending orders can be refunded.`,
+      });
+    }
+
+    // Get completed payment — locked so a concurrent admin cancel/refund
+    // on the same payment can't double-trigger Razorpay
     const payment = await client.query(
-      "SELECT * FROM payments WHERE order_id = $1 AND payment_status = 'completed' ORDER BY created_at DESC LIMIT 1",
+      "SELECT id, transaction_id, amount FROM payments WHERE order_id = $1 AND payment_status = 'completed' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
       [order_id]
     );
 
     if (payment.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(400).json({ message: "No completed payment found for this order" });
     }
 
     const paymentId = payment.rows[0].transaction_id;
 
-    // Initiate refund via Razorpay
+    // Initiate refund via Razorpay (held inside the lock so a concurrent
+    // request against the same order/payment blocks until this commits)
     const refund = await razorpay.payments.refund(paymentId, {
       amount: Math.round(parseFloat(payment.rows[0].amount) * 100),
       notes: {
@@ -196,8 +212,6 @@ export const refundPayment = async (req, res) => {
         order_id: order_id.toString(),
       },
     });
-
-    await client.query("BEGIN");
 
     // Update payment status
     await client.query(
@@ -220,7 +234,7 @@ export const refundPayment = async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   } finally {
     client.release();
   }

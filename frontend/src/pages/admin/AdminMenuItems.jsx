@@ -1,118 +1,67 @@
 import { useState, useEffect } from "react";
-import { Plus, Pencil, Trash2, X, Leaf, FolderOpen } from "lucide-react";
+import { Plus, Pencil, Trash2, X, FolderOpen } from "lucide-react";
 import api from "../../services/api.js";
 import { toast } from "sonner";
+import { useAdminCrud } from "../../hooks/useAdminCrud.js";
+import { useImageUpload } from "../../hooks/useImageUpload.js";
+
+const INITIAL_FORM = {
+    category_id: "", name: "", description: "", price: "", discount_price: "",
+    image_url: "", food_type: "veg", is_available: true, preparation_time: "", calories: "",
+};
+
+const toItemForm = (item) => ({
+    category_id: item.category_id, name: item.name, description: item.description || "",
+    price: item.price, discount_price: item.discount_price || "", image_url: item.image_url || "",
+    food_type: item.food_type || (item.is_veg ? "veg" : "non-veg"),
+    is_available: item.is_available, preparation_time: item.preparation_time || "", calories: item.calories || "",
+});
+
+const transformItemPayload = (form) => {
+    const payload = {
+        ...form,
+        category_id: parseInt(form.category_id),
+        price: parseFloat(form.price),
+        discount_price: form.discount_price ? parseFloat(form.discount_price) : null,
+        preparation_time: form.preparation_time ? parseInt(form.preparation_time) : null,
+        calories: form.calories ? parseInt(form.calories) : null,
+        is_veg: form.food_type === "veg" || form.food_type === "both",
+        food_type: form.food_type,
+    };
+    delete payload.food_type;
+    return payload;
+};
 
 const AdminMenuItems = () => {
-    const [items, setItems] = useState([]);
     const [categories, setCategories] = useState([]);
-    const [loading, setLoading] = useState(true);
     const [categoryFilter, setCategoryFilter] = useState("");
-    const [showModal, setShowModal] = useState(false);
-    const [editing, setEditing] = useState(null);
-    const [uploading, setUploading] = useState(false);
-    const [form, setForm] = useState({
-        category_id: "", name: "", description: "", price: "", discount_price: "",
-        image_url: "", is_veg: false, is_available: true, preparation_time: "", calories: "",
+
+    const {
+        items, loading, showModal, setShowModal, editing, form, setForm,
+        openCreate, openEdit, handleSubmit, handleDelete, fetchItems,
+    } = useAdminCrud({
+        endpoint: "/api/admin/menu-items",
+        listKey: "menu_items",
+        initialForm: INITIAL_FORM,
+        resourceLabel: "Item",
+        transformPayload: transformItemPayload,
+        deleteConfirmMessage: "Delete this menu item?",
     });
 
-    const handleImageUpload = async (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const { uploading, handleImageUpload } = useImageUpload((image_url) => setForm((prev) => ({ ...prev, image_url })));
 
-        const formData = new FormData();
-        formData.append("image", file);
-
-        setUploading(true);
-        try {
-            const res = await api.post("/api/admin/upload", formData, {
-                headers: { "Content-Type": "multipart/form-data" },
-            });
-            setForm((prev) => ({ ...prev, image_url: res.data.image_url }));
-            toast.success("Image uploaded!");
-        } catch (error) {
-            toast.error("Upload not available right now, paste a URL instead.");
-        } finally {
-            setUploading(false);
-            e.target.value = "";
-        }
-    };
-
-    useEffect(() => { fetchData(); }, []);
-
-    const fetchData = async () => {
-        try {
-            const [itemsRes, catRes] = await Promise.all([
-                api.get("/api/admin/menu-items"),
-                api.get("/api/admin/categories"),
-            ]);
-            setItems(itemsRes.data.menu_items || []);
-            setCategories(catRes.data.categories || []);
-        } catch { } finally { setLoading(false); }
-    };
-
-    const openCreate = () => {
-        setEditing(null);
-        setForm({ category_id: categories[0]?.id || "", name: "", description: "", price: "", discount_price: "", image_url: "", food_type: "veg", is_available: true, preparation_time: "", calories: "" });
-        setShowModal(true);
-    };
-
-    const openEdit = (item) => {
-        setEditing(item);
-        const foodType = item.food_type || (item.is_veg ? "veg" : "non-veg");
-        setForm({
-            category_id: item.category_id, name: item.name, description: item.description || "",
-            price: item.price, discount_price: item.discount_price || "", image_url: item.image_url || "",
-            food_type: foodType, is_available: item.is_available, preparation_time: item.preparation_time || "", calories: item.calories || "",
-        });
-        setShowModal(true);
-    };
-
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        const payload = {
-            ...form,
-            category_id: parseInt(form.category_id),
-            price: parseFloat(form.price),
-            discount_price: form.discount_price ? parseFloat(form.discount_price) : null,
-            preparation_time: form.preparation_time ? parseInt(form.preparation_time) : null,
-            calories: form.calories ? parseInt(form.calories) : null,
-            is_veg: form.food_type === "veg" || form.food_type === "both",
-            food_type: form.food_type,
-        };
-        delete payload.food_type;
-        try {
-            if (editing) {
-                await api.put(`/api/admin/menu-items/${editing.id}`, payload);
-                toast.success("Item updated");
-            } else {
-                await api.post("/api/admin/menu-items", payload);
-                toast.success("Item created");
-            }
-            setShowModal(false);
-            fetchData();
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Couldn't save, try again");
-        }
-    };
-
-    const handleDelete = async (id) => {
-        if (!confirm("Delete this menu item?")) return;
-        try {
-            await api.delete(`/api/admin/menu-items/${id}`);
-            toast.success("Item deleted");
-            fetchData();
-        } catch (error) {
-            toast.error(error.response?.data?.message || "Couldn't delete, try again");
-        }
-    };
+    useEffect(() => {
+        api.get("/api/admin/categories")
+            .then((res) => setCategories(res.data.categories || []))
+            .catch(() => {});
+    }, []);
 
     const toggleAvailability = async (id) => {
         try {
             const res = await api.put(`/api/admin/menu-items/${id}/availability`);
             toast.success(res.data.message);
-            fetchData();
-        } catch (error) {
+            fetchItems();
+        } catch {
             toast.error("Something went wrong");
         }
     };
@@ -121,8 +70,8 @@ const AdminMenuItems = () => {
         try {
             const res = await api.put(`/api/admin/menu-items/${id}/featured`);
             toast.success(res.data.message);
-            fetchData();
-        } catch (error) {
+            fetchItems();
+        } catch {
             toast.error("Something went wrong");
         }
     };
@@ -131,7 +80,7 @@ const AdminMenuItems = () => {
         <div>
             <div className="flex items-center justify-between mb-4">
                 <h1 className="text-2xl font-bold text-charcoal">Menu Items</h1>
-                <button onClick={openCreate} className="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 text-sm transition-colors">
+                <button onClick={() => openCreate({ category_id: categories[0]?.id || "" })} className="bg-accent hover:bg-accent-dark text-white px-4 py-2 rounded-lg font-medium flex items-center gap-2 text-sm transition-colors">
                     <Plus size={16} /> Add Item
                 </button>
             </div>
@@ -202,7 +151,7 @@ const AdminMenuItems = () => {
                                         )}
                                     </div>
                                     <div className="flex gap-1.5">
-                                        <button onClick={() => openEdit(item)} className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-white text-primary transition-all">
+                                        <button onClick={() => openEdit(item, toItemForm)} className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center hover:bg-primary hover:text-white text-primary transition-all">
                                             <Pencil size={12} />
                                         </button>
                                         <button onClick={() => handleDelete(item.id)} className="w-7 h-7 rounded-full bg-red-50 flex items-center justify-center hover:bg-red-500 hover:text-white text-red-500 transition-all">

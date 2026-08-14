@@ -101,6 +101,7 @@ const PillNav = () => {
           {items.map((item, i) => (
             <li key={item.href} role="none">
               <Link
+                id={`nav-item-${item.label.toLowerCase()}`}
                 role="menuitem"
                 to={item.href}
                 className={`pill${location.pathname === item.href ? ' is-active' : ''}`}
@@ -132,7 +133,7 @@ const PillNav = () => {
               markAllRead={markAllRead}
               clearNotifications={clearNotifications}
             />
-            <Link to="/cart" className="pill-action-btn" aria-label="Cart">
+            <Link id="nav-item-cart" to="/cart" className="pill-action-btn" aria-label="Cart">
               <ShoppingCart size={18} />
               {itemCount > 0 && <span className="pill-action-badge">{itemCount}</span>}
             </Link>

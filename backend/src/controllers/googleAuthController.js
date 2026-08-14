@@ -1,31 +1,26 @@
 import { OAuth2Client } from "google-auth-library";
 import jwt from "jsonwebtoken";
 import pool from "../db/db.js";
+import { authCookieOptions } from "../utils/cookieOptions.js";
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 // Helper to set HTTP-only cookie
 const setTokenCookie = (res, token) => {
-    res.cookie("token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 3 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("token", token, authCookieOptions());
 };
 
 const setAdminTokenCookie = (res, token) => {
-    res.cookie("admin_token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 3 * 24 * 60 * 60 * 1000,
-    });
+    res.cookie("admin_token", token, authCookieOptions());
 };
 
 // POST /api/auth/google — Customer Google login/signup
 export const googleLogin = async (req, res) => {
     try {
+        if (!process.env.GOOGLE_CLIENT_ID) {
+            return res.status(503).json({ message: "Google sign-in is not configured on this server" });
+        }
+
         const { credential } = req.body;
 
         if (!credential) {
@@ -39,11 +34,12 @@ export const googleLogin = async (req, res) => {
         });
 
         const payload = ticket.getPayload();
-        const { email, name, sub: googleId } = payload;
+        const { name, sub: googleId } = payload;
 
-        if (!email) {
+        if (!payload.email) {
             return res.status(400).json({ message: "Unable to get email from Google" });
         }
+        const email = payload.email.trim().toLowerCase();
 
         // Check if user already exists
         let user = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
@@ -65,7 +61,7 @@ export const googleLogin = async (req, res) => {
         await pool.query("UPDATE users SET updated_at = NOW() WHERE id = $1", [userData.id]);
 
         // Generate JWT
-        const token = jwt.sign({ id: userData.id }, process.env.JWT_SECRET, { expiresIn: "3d" });
+        const token = jwt.sign({ id: userData.id, type: "customer" }, process.env.JWT_SECRET, { expiresIn: "3d" });
         setTokenCookie(res, token);
 
         const { password_hash, ...safeUser } = userData;
@@ -79,6 +75,10 @@ export const googleLogin = async (req, res) => {
 // POST /api/admin/auth/google — Admin Google login
 export const googleAdminLogin = async (req, res) => {
     try {
+        if (!process.env.GOOGLE_CLIENT_ID) {
+            return res.status(503).json({ message: "Google sign-in is not configured on this server" });
+        }
+
         const { credential } = req.body;
 
         if (!credential) {
@@ -92,11 +92,11 @@ export const googleAdminLogin = async (req, res) => {
         });
 
         const payload = ticket.getPayload();
-        const { email } = payload;
 
-        if (!email) {
+        if (!payload.email) {
             return res.status(400).json({ message: "Unable to get email from Google" });
         }
+        const email = payload.email.trim().toLowerCase();
 
         // Check if admin user exists with this email
         const admin = await pool.query("SELECT * FROM admin_users WHERE email = $1", [email]);

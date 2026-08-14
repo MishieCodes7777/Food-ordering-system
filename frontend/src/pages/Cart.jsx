@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react"; 
 import { Link, useNavigate } from "react-router-dom";
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, Receipt, Tag } from "lucide-react";
 import api from "../services/api.js";
@@ -14,7 +14,15 @@ const Cart = () => {
     const { user } = useAuth();
     const [placingOrder, setPlacingOrder] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [updatingItemId, setUpdatingItemId] = useState(null);
+    const [gst, setGst] = useState({ gst_enabled: false, gst_percentage: 0, gst_label: 'GST' });
     const navigate = useNavigate();
+
+    useEffect(() => {
+        api.get("/api/menu/gst").then(res => {
+            if (res.data.gst) setGst(res.data.gst);
+        }).catch(() => {});
+    }, []);
 
     // Calculate bill
     const subtotal = cartItems.reduce((sum, item) => {
@@ -31,10 +39,14 @@ const Cart = () => {
         return sum;
     }, 0);
 
-    const totalBill = subtotal - totalDiscount;
+    const totalBeforeGst = subtotal - totalDiscount;
+    const gstAmount = gst.gst_enabled ? Math.round(totalBeforeGst * gst.gst_percentage / 100) : 0;
+    const totalBill = totalBeforeGst + gstAmount;
 
     const handleUpdateQuantity = async (itemId, newQuantity) => {
+        if (updatingItemId === itemId) return; // ignore clicks while a request for this item is in flight
         try {
+            setUpdatingItemId(itemId);
             if (newQuantity <= 0) {
                 await removeItem(itemId);
                 toast.success("Item removed");
@@ -43,6 +55,8 @@ const Cart = () => {
             }
         } catch (error) {
             toast.error("Couldn't update cart");
+        } finally {
+            setUpdatingItemId(null);
         }
     };
 
@@ -217,7 +231,8 @@ const Cart = () => {
                                 <div className="flex items-center gap-2">
                                     <button
                                         onClick={() => handleUpdateQuantity(item.id, item.quantity - 1)}
-                                        className="w-8 h-8 rounded-full bg-cream flex items-center justify-center hover:bg-primary hover:text-white transition-all"
+                                        disabled={updatingItemId === item.id}
+                                        className="w-8 h-8 rounded-full bg-cream flex items-center justify-center hover:bg-primary hover:text-white transition-all disabled:opacity-50"
                                         aria-label="Decrease quantity"
                                     >
                                         <Minus size={14} />
@@ -225,7 +240,8 @@ const Cart = () => {
                                     <span className="w-8 text-center font-semibold text-charcoal">{item.quantity}</span>
                                     <button
                                         onClick={() => handleUpdateQuantity(item.id, item.quantity + 1)}
-                                        className="w-8 h-8 rounded-full bg-cream flex items-center justify-center hover:bg-primary hover:text-white transition-all"
+                                        disabled={updatingItemId === item.id}
+                                        className="w-8 h-8 rounded-full bg-cream flex items-center justify-center hover:bg-primary hover:text-white transition-all disabled:opacity-50"
                                         aria-label="Increase quantity"
                                     >
                                         <Plus size={14} />
@@ -238,7 +254,8 @@ const Cart = () => {
                                 {/* Remove button */}
                                 <button
                                     onClick={() => handleUpdateQuantity(item.id, 0)}
-                                    className="text-red-400 hover:text-red-600 transition-colors"
+                                    disabled={updatingItemId === item.id}
+                                    className="text-red-400 hover:text-red-600 transition-colors disabled:opacity-50"
                                     aria-label="Remove item"
                                 >
                                     <Trash2 size={18} />
@@ -268,6 +285,13 @@ const Cart = () => {
                                     Discount
                                 </span>
                                 <span>-₹{totalDiscount.toFixed(2)}</span>
+                            </div>
+                        )}
+
+                        {gst.gst_enabled && gstAmount > 0 && (
+                            <div className="flex justify-between text-charcoal/60 text-sm">
+                                <span>{gst.gst_label} ({gst.gst_percentage}%)</span>
+                                <span>+₹{gstAmount}</span>
                             </div>
                         )}
 

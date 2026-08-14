@@ -2,12 +2,12 @@ import bcrypt from "bcrypt";
 import pool from "../db/db.js";
 
 // GET /api/profile — Get current user's profile
-export const getProfile = async (req, res) => {
+export const getProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
     const user = await pool.query(
-      "SELECT id, name, email, phone, role, created_at FROM users WHERE id = $1",
+      "SELECT id, name, email, phone, phone_verified, role, created_at FROM users WHERE id = $1",
       [userId]
     );
 
@@ -17,29 +17,31 @@ export const getProfile = async (req, res) => {
 
     res.json({ user: user.rows[0] });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   }
 };
 
-// PUT /api/profile — Update user's profile (name, phone)
-export const updateProfile = async (req, res) => {
+// PUT /api/profile — Update user's profile (name only — phone is fixed at
+// registration since it's the verified identity element; deliberately not
+// accepted here even if a client sends one)
+export const updateProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
-    const { name, phone } = req.body;
+    const { name } = req.body;
 
     const updated = await pool.query(
-      "UPDATE users SET name = $1, phone = $2, updated_at = NOW() WHERE id = $3 RETURNING id, name, email, phone, role, created_at, updated_at",
-      [name, phone, userId]
+      "UPDATE users SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING id, name, email, phone, phone_verified, role, created_at, updated_at",
+      [name, userId]
     );
 
     res.json({ message: "Profile updated", user: updated.rows[0] });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   }
 };
 
 // PUT /api/profile/password — Change password
-export const changePassword = async (req, res) => {
+export const changePassword = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { current_password, new_password } = req.body;
@@ -58,7 +60,7 @@ export const changePassword = async (req, res) => {
     }
 
     // Hash new password
-    const salt = await bcrypt.genSalt(10);
+    const salt = await bcrypt.genSalt(12);
     const hashedPassword = await bcrypt.hash(new_password, salt);
 
     await pool.query(
@@ -68,53 +70,63 @@ export const changePassword = async (req, res) => {
 
     res.json({ message: "Password changed successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   }
 };
 
-// GET /api/profile/orders — Get user's order history with items and payment details
-export const getOrderHistory = async (req, res) => {
+// GET /api/profile/orders — Get user's order history with items and payment details (paginated)
+export const getOrderHistory = async (req, res, next) => {
   try {
     const userId = req.user.id;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 50);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const offset = (page - 1) * limit;
 
-    // Get all orders for the user
+    // Get this page of orders for the user
     const orders = await pool.query(
-      "SELECT id, total_amount, status, created_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC",
-      [userId]
+      "SELECT id, total_amount, status, created_at FROM orders WHERE user_id = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+      [userId, limit, offset]
     );
 
     if (orders.rows.length === 0) {
-      return res.json({ orders: [], message: "No orders yet" });
+      return res.json({ orders: [], page, limit, message: "No orders yet" });
     }
 
-    // For each order, get items and payment info
-    const orderHistory = [];
+    // Batch-fetch items and latest payment per order in 2 queries instead of 2 per order
+    const orderIds = orders.rows.map((order) => order.id);
 
-    for (const order of orders.rows) {
-      // Get order items
-      const items = await pool.query(
-        "SELECT menu_item_id, quantity, price FROM order_items WHERE order_id = $1",
-        [order.id]
-      );
+    const items = await pool.query(
+      "SELECT order_id, menu_item_id, quantity, price FROM order_items WHERE order_id = ANY($1)",
+      [orderIds]
+    );
+    const itemsByOrderId = items.rows.reduce((acc, item) => {
+      (acc[item.order_id] ||= []).push(item);
+      return acc;
+    }, {});
 
-      // Get payment details
-      const payment = await pool.query(
-        "SELECT amount, payment_method, payment_status, transaction_id, created_at AS paid_at FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
-        [order.id]
-      );
+    const payments = await pool.query(
+      `SELECT DISTINCT ON (order_id) order_id, amount, payment_method, payment_status, transaction_id, created_at AS paid_at
+       FROM payments
+       WHERE order_id = ANY($1)
+       ORDER BY order_id, created_at DESC`,
+      [orderIds]
+    );
+    const paymentByOrderId = payments.rows.reduce((acc, payment) => {
+      acc[payment.order_id] = payment;
+      return acc;
+    }, {});
 
-      orderHistory.push({
-        order_id: order.id,
-        total_amount: order.total_amount,
-        status: order.status,
-        ordered_at: order.created_at,
-        items: items.rows,
-        payment: payment.rows.length > 0 ? payment.rows[0] : null,
-      });
-    }
+    const orderHistory = orders.rows.map((order) => ({
+      order_id: order.id,
+      total_amount: order.total_amount,
+      status: order.status,
+      ordered_at: order.created_at,
+      items: itemsByOrderId[order.id] || [],
+      payment: paymentByOrderId[order.id] || null,
+    }));
 
-    res.json({ orders: orderHistory });
+    res.json({ orders: orderHistory, page, limit });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   }
 };

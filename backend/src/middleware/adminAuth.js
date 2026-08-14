@@ -17,12 +17,16 @@ const adminAuth = async (req, res, next) => {
         return res.status(401).json({ message: "Access denied, no token provided" });
     }
 
-    if (isTokenBlacklisted(token)) {
+    if (await isTokenBlacklisted(token)) {
         return res.status(401).json({ message: "Token has been invalidated. Please login again." });
     }
 
     try {
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+        if (decoded.type !== "admin") {
+            return res.status(401).json({ message: "Invalid admin token" });
+        }
 
         // Verify this is an admin user
         const admin = await pool.query(

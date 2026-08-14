@@ -1,7 +1,9 @@
-import { useState, useEffect } from "react";
-import { Clock, CheckCircle, XCircle, ChefHat } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Download, ChevronLeft, ChevronRight } from "lucide-react";
 import api from "../../services/api.js";
 import { toast } from "sonner";
+import AdminPageHeader from "../../components/admin/AdminPageHeader.jsx";
+import { downloadCsv } from "../../utils/csvExport.js";
 
 const statusOptions = ["pending", "accepted", "preparing", "ready", "completed", "cancelled"];
 
@@ -18,22 +20,34 @@ const AdminOrders = () => {
     const [orders, setOrders] = useState([]);
     const [filter, setFilter] = useState("");
     const [loading, setLoading] = useState(true);
+    const [exporting, setExporting] = useState(false);
+    const [page, setPage] = useState(1);
+    const [total, setTotal] = useState(0);
+    const limit = 20;
 
-    useEffect(() => {
-        fetchOrders();
-    }, [filter]);
-
-    const fetchOrders = async () => {
+    const fetchOrders = useCallback(async () => {
         try {
             setLoading(true);
-            const params = filter ? `?status=${filter}` : "";
-            const res = await api.get(`/api/admin/orders${params}`);
+            const params = new URLSearchParams({ page, limit });
+            if (filter) params.set("status", filter);
+            const res = await api.get(`/api/admin/orders?${params.toString()}`);
             setOrders(res.data.orders || []);
+            setTotal(res.data.total || 0);
         } catch {
             setOrders([]);
+            setTotal(0);
         } finally {
             setLoading(false);
         }
+    }, [filter, page]);
+
+    useEffect(() => {
+        fetchOrders();
+    }, [fetchOrders]);
+
+    const handleFilterChange = (newFilter) => {
+        setFilter(newFilter);
+        setPage(1);
     };
 
     const updateStatus = async (orderId, newStatus) => {
@@ -41,19 +55,63 @@ const AdminOrders = () => {
             await api.put(`/api/admin/orders/${orderId}/status`, { status: newStatus });
             toast.success(`Order #${orderId} updated to ${newStatus}`);
             fetchOrders();
-        } catch (error) {
+        } catch {
             toast.error("Couldn't update order status, try again");
         }
     };
 
+    const handleExport = async () => {
+        try {
+            setExporting(true);
+            const params = new URLSearchParams({ export: "true" });
+            if (filter) params.set("status", filter);
+
+            const res = await api.get(`/api/admin/orders?${params.toString()}`);
+            const rows = res.data.orders || [];
+            if (rows.length === 0) {
+                toast.error("No orders to export");
+                return;
+            }
+
+            downloadCsv(`orders-${new Date().toISOString().slice(0, 10)}.csv`, [
+                { label: "Order ID", value: (r) => r.id },
+                { label: "Date", value: (r) => new Date(r.created_at).toLocaleString("en-IN") },
+                { label: "Customer", value: (r) => r.customer_name || "" },
+                { label: "Phone", value: (r) => r.customer_phone || "" },
+                { label: "Status", value: (r) => r.status },
+                { label: "Payment Status", value: (r) => r.payment?.payment_status || "no payment" },
+                { label: "Items", value: (r) => (r.items || []).map((i) => `${i.name || `Item #${i.menu_item_id}`} x${i.quantity}`).join("; ") },
+                { label: "Amount", value: (r) => r.total_amount },
+            ], rows);
+        } catch {
+            toast.error("Couldn't export orders, try again");
+        } finally {
+            setExporting(false);
+        }
+    };
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
     return (
         <div>
-            <h1 className="text-2xl font-bold text-charcoal mb-6">Orders</h1>
+            <AdminPageHeader
+                title="Orders"
+                actions={
+                    <button
+                        onClick={handleExport}
+                        disabled={exporting}
+                        className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-medium text-charcoal hover:border-primary transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        <Download size={16} />
+                        {exporting ? "Exporting..." : "Export CSV"}
+                    </button>
+                }
+            />
 
             {/* Filter Tabs */}
             <div className="flex flex-wrap gap-2 mb-6">
                 <button
-                    onClick={() => setFilter("")}
+                    onClick={() => handleFilterChange("")}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${!filter ? "bg-primary text-white" : "bg-white text-charcoal border border-gray-200 hover:border-primary"
                         }`}
                 >
@@ -62,7 +120,7 @@ const AdminOrders = () => {
                 {statusOptions.map((status) => (
                     <button
                         key={status}
-                        onClick={() => setFilter(status)}
+                        onClick={() => handleFilterChange(status)}
                         className={`px-4 py-2 rounded-lg text-sm font-medium capitalize transition-all ${filter === status ? "bg-primary text-white" : "bg-white text-charcoal border border-gray-200 hover:border-primary"
                             }`}
                     >
@@ -155,6 +213,34 @@ const AdminOrders = () => {
                             </div>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Pagination */}
+            {!loading && total > 0 && (
+                <div className="flex items-center justify-between mt-4 text-sm text-charcoal/60">
+                    <p>
+                        Showing {(page - 1) * limit + 1}–{Math.min(page * limit, total)} of {total}
+                    </p>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setPage((p) => Math.max(1, p - 1))}
+                            disabled={page <= 1}
+                            className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed hover:border-primary transition-colors"
+                            aria-label="Previous page"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <span>Page {page} of {totalPages}</span>
+                        <button
+                            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={page >= totalPages}
+                            className="p-2 rounded-lg bg-white border border-gray-200 disabled:opacity-40 disabled:cursor-not-allowed hover:border-primary transition-colors"
+                            aria-label="Next page"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
                 </div>
             )}
         </div>

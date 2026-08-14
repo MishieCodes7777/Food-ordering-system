@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
-import { Bell, X, Check, Clock, ChefHat, CheckCircle } from "lucide-react";
+import { Bell, Check, ChefHat, CheckCircle } from "lucide-react";
+import { useDropdown } from "../hooks/useDropdown.js";
+import { timeAgo } from "../utils/timeAgo.js";
 
 const statusIcons = {
     confirmed: <Check size={14} className="text-blue-500" />,
@@ -9,40 +10,15 @@ const statusIcons = {
 };
 
 const NotificationBell = ({ notifications, unreadCount, markAllRead, clearNotifications }) => {
-    const [open, setOpen] = useState(false);
-    const dropdownRef = useRef(null);
-
-    // Close dropdown when clicking outside
-    useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
-                setOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const handleToggle = () => {
-        setOpen(!open);
-        if (!open && unreadCount > 0) {
-            markAllRead();
-        }
-    };
-
-    const timeAgo = (date) => {
-        const seconds = Math.floor((new Date() - new Date(date)) / 1000);
-        if (seconds < 60) return "Just now";
-        if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-        if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-        return `${Math.floor(seconds / 86400)}d ago`;
-    };
+    const { open, toggle, ref: dropdownRef } = useDropdown({
+        onOpen: () => unreadCount > 0 && markAllRead(),
+    });
 
     return (
         <div className="relative" ref={dropdownRef}>
             {/* Bell Button */}
             <button
-                onClick={handleToggle}
+                onClick={toggle}
                 className="pill-action-btn relative"
                 aria-label="Notifications"
             >

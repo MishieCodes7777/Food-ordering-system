@@ -1,4 +1,5 @@
-ode# Dependencies
+```gitignore
+# Dependencies
 node_modules/
 
 # Environment variables (contains passwords, secrets)
@@ -9,7 +10,7 @@ node_modules/
 # Logs
 logs/
 *.log
-npm-debug.log*
+*npm-debug.log*
 
 # OS files
 Thumbs.db
@@ -23,5 +24,9 @@ Thumbs.db
 dist/
 build/
 
+# Claude
+CLAUDE.md
+
 # Package lock (optional - remove this line if you want to track it)
 # package-lock.json
+```

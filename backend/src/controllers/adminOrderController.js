@@ -1,21 +1,25 @@
 import pool from "../db/db.js";
-import Razorpay from "razorpay";
+import razorpay from "../config/razorpay.js";
+import logger from "../utils/logger.js";
+import { sendOrderReadySms } from "../config/msg91.js";
 
-const razorpay = new Razorpay({
-    key_id: process.env.RAZORPAY_KEY_ID,
-    key_secret: process.env.RAZORPAY_KEY_SECRET,
-});
-
-// GET /api/admin/orders — Get all orders for the restaurant
-export const getRestaurantOrders = async (req, res) => {
+// GET /api/admin/orders — Get all orders for the restaurant (paginated)
+export const getRestaurantOrders = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
 
         // Optional status filter
         const status = req.query.status || null;
+        // CSV export needs the full filtered set in one call, not just a page —
+        // export requests get a much higher ceiling than normal table paging.
+        const maxLimit = req.query.export === "true" ? 5000 : 50;
+        const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), maxLimit);
+        const page = Math.max(parseInt(req.query.page) || 1, 1);
+        const offset = (page - 1) * limit;
 
         let query = `
-      SELECT o.*, u.name as customer_name, u.phone as customer_phone, u.created_at as customer_since
+      SELECT o.*, u.name as customer_name, u.phone as customer_phone, u.created_at as customer_since,
+             COUNT(*) OVER() AS total_count
       FROM orders o
       JOIN users u ON o.user_id = u.id
       WHERE o.restaurant_id = $1
@@ -23,43 +27,61 @@ export const getRestaurantOrders = async (req, res) => {
         const params = [restaurantId];
 
         if (status) {
-            query += " AND o.status = $2";
             params.push(status);
+            query += ` AND o.status = $${params.length}`;
         }
 
-        query += " ORDER BY o.created_at DESC";
+        params.push(limit, offset);
+        query += ` ORDER BY o.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`;
 
         const orders = await pool.query(query, params);
+        const totalCount = orders.rows[0]?.total_count ? parseInt(orders.rows[0].total_count) : 0;
 
-        // Get items for each order
-        const ordersWithItems = [];
-        for (const order of orders.rows) {
+        // Batch-fetch items and latest payment per order in 2 queries instead of 2 per order
+        const orderIds = orders.rows.map((order) => order.id);
+        let itemsByOrderId = {};
+        let paymentByOrderId = {};
+
+        if (orderIds.length > 0) {
             const items = await pool.query(
-                `SELECT oi.menu_item_id, oi.quantity, oi.price, mi.name
+                `SELECT oi.order_id, oi.menu_item_id, oi.quantity, oi.price, mi.name
                  FROM order_items oi
                  LEFT JOIN menu_items mi ON oi.menu_item_id = mi.id
-                 WHERE oi.order_id = $1`,
-                [order.id]
+                 WHERE oi.order_id = ANY($1)`,
+                [orderIds]
             );
-            const payment = await pool.query(
-                "SELECT payment_status, payment_method, transaction_id FROM payments WHERE order_id = $1 ORDER BY created_at DESC LIMIT 1",
-                [order.id]
+            itemsByOrderId = items.rows.reduce((acc, item) => {
+                (acc[item.order_id] ||= []).push(item);
+                return acc;
+            }, {});
+
+            const payments = await pool.query(
+                `SELECT DISTINCT ON (order_id) order_id, payment_status, payment_method, transaction_id
+                 FROM payments
+                 WHERE order_id = ANY($1)
+                 ORDER BY order_id, created_at DESC`,
+                [orderIds]
             );
-            ordersWithItems.push({
-                ...order,
-                items: items.rows,
-                payment: payment.rows.length > 0 ? payment.rows[0] : null,
-            });
+            paymentByOrderId = payments.rows.reduce((acc, payment) => {
+                acc[payment.order_id] = payment;
+                return acc;
+            }, {});
         }
 
-        res.json({ orders: ordersWithItems });
+        const ordersWithItems = orders.rows.map(({ total_count, ...order }) => ({
+            ...order,
+            items: itemsByOrderId[order.id] || [],
+            payment: paymentByOrderId[order.id] || null,
+        }));
+
+        res.json({ orders: ordersWithItems, page, limit, total: totalCount });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // GET /api/admin/orders/:orderId — Get order details with items
-export const getOrderDetails = async (req, res) => {
+export const getOrderDetails = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const orderId = parseInt(req.params.orderId);
@@ -108,12 +130,12 @@ export const getOrderDetails = async (req, res) => {
             status_history: statusHistory.rows,
         });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/orders/:orderId/status — Update order status
-export const updateOrderStatus = async (req, res) => {
+export const updateOrderStatus = async (req, res, next) => {
     const client = await pool.connect();
 
     try {
@@ -127,9 +149,10 @@ export const updateOrderStatus = async (req, res) => {
 
         await client.query("BEGIN");
 
-        // Verify order belongs to this restaurant
+        // Verify order belongs to this restaurant — locked so a concurrent
+        // status update/cancel on the same order blocks until this commits
         const order = await client.query(
-            "SELECT id, status FROM orders WHERE id = $1 AND restaurant_id = $2",
+            "SELECT id, status, user_id FROM orders WHERE id = $1 AND restaurant_id = $2 FOR UPDATE",
             [orderId, restaurantId]
         );
 
@@ -140,8 +163,8 @@ export const updateOrderStatus = async (req, res) => {
 
         // Update order status
         await client.query(
-            "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2",
-            [status, orderId]
+            "UPDATE orders SET status = $1, updated_at = NOW() WHERE id = $2 AND restaurant_id = $3",
+            [status, orderId, restaurantId]
         );
 
         // Record in status history
@@ -150,10 +173,11 @@ export const updateOrderStatus = async (req, res) => {
             [orderId, status, req.admin.name, remarks || null]
         );
 
-        // If cancelled, auto-refund the payment
+        // If cancelled, auto-refund the payment. Locked so a concurrent customer
+        // self-refund or another admin request on the same payment can't double-trigger Razorpay.
         if (status === "cancelled") {
             const payment = await client.query(
-                "SELECT * FROM payments WHERE order_id = $1 AND payment_status = 'completed' ORDER BY created_at DESC LIMIT 1",
+                "SELECT * FROM payments WHERE order_id = $1 AND payment_status = 'completed' ORDER BY created_at DESC LIMIT 1 FOR UPDATE",
                 [orderId]
             );
 
@@ -168,7 +192,13 @@ export const updateOrderStatus = async (req, res) => {
                         [payment.rows[0].id]
                     );
                 } catch (refundErr) {
-                    console.error("[REFUND ERROR]:", refundErr.message);
+                    logger.error({
+                        requestId: req.id,
+                        orderId,
+                        paymentId: payment.rows[0].id,
+                        adminId: req.admin.id,
+                        err: { message: refundErr.message },
+                    }, "Auto-refund failed during admin order cancellation");
                     // Still cancel the order even if refund fails — admin can manually refund
                 }
             }
@@ -176,10 +206,28 @@ export const updateOrderStatus = async (req, res) => {
 
         await client.query("COMMIT");
 
+        // Text the customer once their order is ready to collect — best-effort,
+        // doesn't fail the status update if the SMS provider is down/misconfigured.
+        if (status === "ready") {
+            try {
+                const customer = await pool.query("SELECT name, phone FROM users WHERE id = $1", [order.rows[0].user_id]);
+                if (customer.rows[0]?.phone) {
+                    await sendOrderReadySms(customer.rows[0].phone, { customerName: customer.rows[0].name, orderId });
+                }
+            } catch (smsErr) {
+                logger.error({
+                    requestId: req.id,
+                    orderId,
+                    adminId: req.admin.id,
+                    err: { message: smsErr.message },
+                }, "Order-ready SMS failed to send");
+            }
+        }
+
         res.json({ message: `Order status updated to '${status}'`, order_id: orderId, status });
     } catch (error) {
         await client.query("ROLLBACK");
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     } finally {
         client.release();
     }

@@ -1,7 +1,8 @@
 import pool from "../db/db.js";
 
-// POST /api/reviews — Submit a rating for a completed order (one per order)
-export const createReview = async (req, res) => {
+// POST /api/reviews — Submit a rating for a completed order (one per order,
+// verified by ownership + status — not open to anyone who's merely browsed).
+export const createReview = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { order_id, rating, comment } = req.body;
@@ -32,13 +33,34 @@ export const createReview = async (req, res) => {
 
     res.status(201).json({ message: "Review submitted", review: review.rows[0] });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
+  }
+};
+
+// GET /api/reviews/order/:orderId — Get the current user's review for a specific order (if any)
+export const getReviewForOrder = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const orderId = parseInt(req.params.orderId);
+
+    if (isNaN(orderId)) {
+      return res.status(400).json({ message: "Invalid order ID" });
+    }
+
+    const review = await pool.query(
+      "SELECT * FROM reviews WHERE order_id = $1 AND user_id = $2",
+      [orderId, userId]
+    );
+
+    res.json({ review: review.rows[0] || null });
+  } catch (error) {
+    next(error);
   }
 };
 
 // GET /api/reviews/public — Public: real customer reviews that include a written comment,
 // for display as testimonials. Never fabricated — empty array if nobody has left one yet.
-export const getPublicReviews = async (req, res) => {
+export const getPublicReviews = async (req, res, next) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 6, 20);
 
@@ -61,27 +83,57 @@ export const getPublicReviews = async (req, res) => {
 
     res.json({ reviews: testimonials });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
   }
 };
 
-// GET /api/reviews/order/:orderId — Get the current user's review for a specific order (if any)
-export const getReviewForOrder = async (req, res) => {
+// GET /api/admin/reviews — moderation list for the admin's restaurant, most recent first
+export const getReviewsAdmin = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    const orderId = parseInt(req.params.orderId);
+    const restaurantId = req.admin.restaurant_id;
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const offset = (page - 1) * limit;
 
-    if (isNaN(orderId)) {
-      return res.status(400).json({ message: "Invalid order ID" });
-    }
-
-    const review = await pool.query(
-      "SELECT * FROM reviews WHERE order_id = $1 AND user_id = $2",
-      [orderId, userId]
+    const result = await pool.query(
+      `SELECT r.id, r.rating, r.comment, r.created_at, r.order_id, u.name AS customer_name,
+              COUNT(*) OVER() AS total_count
+       FROM reviews r
+       JOIN users u ON r.user_id = u.id
+       WHERE r.restaurant_id = $1
+       ORDER BY r.created_at DESC
+       LIMIT $2 OFFSET $3`,
+      [restaurantId, limit, offset]
     );
 
-    res.json({ review: review.rows[0] || null });
+    const total = result.rows[0]?.total_count ? parseInt(result.rows[0].total_count) : 0;
+    const reviews = result.rows.map(({ total_count, ...row }) => row);
+
+    res.json({ reviews, page, limit, total });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    next(error);
+  }
+};
+
+// DELETE /api/admin/reviews/:id — moderation: remove a spam/abusive review
+export const deleteReviewAdmin = async (req, res, next) => {
+  try {
+    const restaurantId = req.admin.restaurant_id;
+    const reviewId = parseInt(req.params.id);
+    if (isNaN(reviewId)) {
+      return res.status(400).json({ message: "Invalid review ID" });
+    }
+
+    const result = await pool.query(
+      "DELETE FROM reviews WHERE id = $1 AND restaurant_id = $2 RETURNING id",
+      [reviewId, restaurantId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Review not found" });
+    }
+
+    res.json({ message: "Review deleted" });
+  } catch (error) {
+    next(error);
   }
 };

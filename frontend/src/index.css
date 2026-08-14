@@ -42,6 +42,18 @@ body {
     scrollbar-width: none;
 }
 
+/* Gentle bob + rotate for the floating food emoji on the auth pages */
+@keyframes float-food {
+    0%,
+    100% {
+        transform: translateY(0) rotate(calc(var(--float-rotate) * -1));
+    }
+
+    50% {
+        transform: translateY(-22px) rotate(var(--float-rotate));
+    }
+}
+
 /* Fix Chrome autofill for dark login pages */
 input:-webkit-autofill,
 input:-webkit-autofill:hover,

@@ -172,22 +172,7 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-}
-
-.onboarding-arrow--top-center {
-  top: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-}
-
-.onboarding-arrow--top-right {
-  top: 70px;
-  right: 80px;
-}
-
-.onboarding-arrow--bottom-right {
-  bottom: 180px;
-  right: 60px;
+  transition: left 0.3s ease, top 0.3s ease;
 }
 
 .onboarding-arrow-text {
@@ -198,21 +183,4 @@
   border-radius: 6px;
   white-space: nowrap;
   font-weight: 500;
-}
-
-@media (max-width: 768px) {
-  .onboarding-arrow--top-center {
-    top: 70px;
-    left: 50%;
-  }
-
-  .onboarding-arrow--top-right {
-    top: 70px;
-    right: 20px;
-  }
-
-  .onboarding-arrow--bottom-right {
-    bottom: 120px;
-    right: 20px;
-  }
 }

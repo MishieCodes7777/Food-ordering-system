@@ -125,3 +125,32 @@ export const updateOrderStatusSchema = z.object({
     status: z.enum(["pending", "accepted", "preparing", "ready", "completed", "cancelled"]),
     remarks: z.string().optional().nullable(),
 });
+
+// Coupon Schemas
+export const createCouponSchema = z.object({
+    code: z.string().trim().min(3, "Code must be at least 3 characters").max(30),
+    description: z.string().optional().nullable(),
+    discount_type: z.enum(["percentage", "fixed"]),
+    discount_value: z.number().positive("Discount value must be greater than 0"),
+    min_order_amount: z.number().min(0).optional(),
+    max_discount_amount: z.number().positive().optional().nullable(),
+    usage_limit: z.number().int().positive().optional().nullable(),
+    per_user_limit: z.number().int().positive().optional(),
+    valid_until: z.string().optional().nullable(),
+    is_active: z.boolean().optional(),
+}).refine((data) => data.discount_type !== "percentage" || data.discount_value <= 100, {
+    message: "Percentage discount can't exceed 100",
+    path: ["discount_value"],
+});
+
+export const updateCouponSchema = z.object({
+    description: z.string().optional().nullable(),
+    discount_type: z.enum(["percentage", "fixed"]).optional(),
+    discount_value: z.number().positive().optional(),
+    min_order_amount: z.number().min(0).optional(),
+    max_discount_amount: z.number().positive().optional().nullable(),
+    usage_limit: z.number().int().positive().optional().nullable(),
+    per_user_limit: z.number().int().positive().optional(),
+    valid_until: z.string().optional().nullable(),
+    is_active: z.boolean().optional(),
+});

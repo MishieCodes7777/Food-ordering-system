@@ -17,6 +17,7 @@ const SmoothInput = ({
   required,
   minLength,
   disabled,
+  rightElement,
   ...props
 }) => {
   const [internalValue, setInternalValue] = useState(defaultValue);
@@ -24,7 +25,6 @@ const SmoothInput = ({
 
   const isControlled = value !== undefined;
   const inputValue = isControlled ? String(value) : internalValue;
-  const hasValue = inputValue.length > 0;
 
   return (
     <div className={`smooth-input-wrapper ${wrapperClassName}`}>
@@ -42,7 +42,7 @@ const SmoothInput = ({
           id={id}
           type={type}
           placeholder={placeholder}
-          className={`smooth-input ${className}`}
+          className={`smooth-input ${rightElement ? 'smooth-input-with-right-el' : ''} ${className}`}
           value={inputValue}
           required={required}
           minLength={minLength}
@@ -64,6 +64,7 @@ const SmoothInput = ({
           }}
           transition={{ duration: 0.15 }}
         />
+        {rightElement && <div className="smooth-input-right-el">{rightElement}</div>}
         {/* Animated underline */}
         <motion.div
           className="smooth-input-underline"

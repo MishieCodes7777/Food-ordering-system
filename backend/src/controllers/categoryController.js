@@ -1,7 +1,7 @@
 import pool from "../db/db.js";
 
 // GET /api/admin/categories — Get all categories for the restaurant
-export const getCategories = async (req, res) => {
+export const getCategories = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
 
@@ -12,12 +12,12 @@ export const getCategories = async (req, res) => {
 
         res.json({ categories: categories.rows });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // GET /api/admin/categories/:id — Get single category
-export const getCategoryById = async (req, res) => {
+export const getCategoryById = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const categoryId = parseInt(req.params.id);
@@ -37,12 +37,12 @@ export const getCategoryById = async (req, res) => {
 
         res.json({ category: category.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/categories — Create a new category
-export const createCategory = async (req, res) => {
+export const createCategory = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const { name, description, image_url, display_order, is_active } = req.body;
@@ -56,12 +56,12 @@ export const createCategory = async (req, res) => {
 
         res.status(201).json({ message: "Category created", category: newCategory.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/categories/:id — Update a category
-export const updateCategory = async (req, res) => {
+export const updateCategory = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const categoryId = parseInt(req.params.id);
@@ -91,12 +91,12 @@ export const updateCategory = async (req, res) => {
 
         res.json({ message: "Category updated", category: updated.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // DELETE /api/admin/categories/:id — Delete a category
-export const deleteCategory = async (req, res) => {
+export const deleteCategory = async (req, res, next) => {
     try {
         const restaurantId = req.admin.restaurant_id;
         const categoryId = parseInt(req.params.id);
@@ -128,12 +128,12 @@ export const deleteCategory = async (req, res) => {
 
         res.json({ message: "Category deleted" });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // PUT /api/admin/categories/reorder — Reorder categories
-export const reorderCategories = async (req, res) => {
+export const reorderCategories = async (req, res, next) => {
     const client = await pool.connect();
 
     try {
@@ -154,7 +154,7 @@ export const reorderCategories = async (req, res) => {
         res.json({ message: "Categories reordered" });
     } catch (error) {
         await client.query("ROLLBACK");
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     } finally {
         client.release();
     }

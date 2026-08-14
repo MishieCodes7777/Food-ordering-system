@@ -2,50 +2,20 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import pool from "../db/db.js";
 import { blacklistToken } from "../utils/tokenBlacklist.js";
+import { authCookieOptions, clearAuthCookieOptions } from "../utils/cookieOptions.js";
+import { createLockoutTracker } from "../utils/loginLockout.js";
 
-// In-memory store for admin login attempts
-const adminLoginAttempts = new Map();
-
-const MAX_ATTEMPTS = 10;
-const LOCK_TIME = 30 * 60 * 1000; // 30 minutes
-
-const isAccountLocked = (email) => {
-    const attempts = adminLoginAttempts.get(email);
-    if (!attempts) return false;
-
-    if (attempts.count >= MAX_ATTEMPTS) {
-        const timePassed = Date.now() - attempts.lastAttempt;
-        if (timePassed < LOCK_TIME) return true;
-        adminLoginAttempts.delete(email);
-        return false;
-    }
-    return false;
-};
-
-const recordFailedAttempt = (email) => {
-    const attempts = adminLoginAttempts.get(email) || { count: 0, lastAttempt: Date.now() };
-    attempts.count += 1;
-    attempts.lastAttempt = Date.now();
-    adminLoginAttempts.set(email, attempts);
-};
-
-const clearAttempts = (email) => {
-    adminLoginAttempts.delete(email);
-};
+const lockout = createLockoutTracker({ namespace: "admin" });
 
 const setAdminTokenCookie = (res, token) => {
-    res.cookie("admin_token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-        maxAge: 3 * 24 * 60 * 60 * 1000, // 3 days
-    });
+    res.cookie("admin_token", token, authCookieOptions());
 };
 
 // POST /api/admin/auth/register — Register a new admin user (owner only)
-export const registerAdmin = async (req, res) => {
+export const registerAdmin = async (req, res, next) => {
     try {
-        const { name, email, password, restaurant_id, role } = req.body;
+        const { name, password, restaurant_id, role } = req.body;
+        const email = req.body.email.trim().toLowerCase();
 
         // Only owners can register new admin users
         if (req.admin.role !== "owner") {
@@ -74,37 +44,35 @@ export const registerAdmin = async (req, res) => {
 
         res.status(201).json({ message: "Admin user created", admin: newAdmin.rows[0] });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/auth/login — Admin login
-export const loginAdmin = async (req, res) => {
+export const loginAdmin = async (req, res, next) => {
     try {
-        const { email, password } = req.body;
+        const { password } = req.body;
+        const email = req.body.email.trim().toLowerCase();
 
         // Check account lockout
-        if (isAccountLocked(email)) {
-            const attempts = adminLoginAttempts.get(email);
-            const remainingTime = Math.ceil((LOCK_TIME - (Date.now() - attempts.lastAttempt)) / 60000);
+        if (await lockout.isLocked(email)) {
             return res.status(423).json({
-                message: `Account temporarily locked. Try again in ${remainingTime} minutes.`,
+                message: `Account temporarily locked. Try again in ${await lockout.remainingLockMinutes(email)} minutes.`,
             });
         }
 
         // Find admin user
         const admin = await pool.query("SELECT * FROM admin_users WHERE email = $1", [email]);
         if (admin.rows.length === 0) {
-            recordFailedAttempt(email);
+            await lockout.recordFailure(email);
             return res.status(400).json({ message: "Invalid email or password" });
         }
 
         // Compare password
         const isMatch = await bcrypt.compare(password, admin.rows[0].password_hash);
         if (!isMatch) {
-            recordFailedAttempt(email);
-            const attempts = adminLoginAttempts.get(email);
-            const remaining = MAX_ATTEMPTS - attempts.count;
+            await lockout.recordFailure(email);
+            const remaining = await lockout.remainingAttempts(email);
 
             if (remaining <= 3 && remaining > 0) {
                 return res.status(400).json({
@@ -116,7 +84,7 @@ export const loginAdmin = async (req, res) => {
         }
 
         // Success
-        clearAttempts(email);
+        await lockout.clear(email);
 
         const token = jwt.sign(
             { id: admin.rows[0].id, type: "admin" },
@@ -129,30 +97,26 @@ export const loginAdmin = async (req, res) => {
         const { password_hash, ...adminData } = admin.rows[0];
         res.json({ admin: adminData, token });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
 
 // POST /api/admin/auth/logout — Admin logout
-export const logoutAdmin = (req, res) => {
+export const logoutAdmin = async (req, res) => {
     if (req.token) {
-        blacklistToken(req.token);
+        await blacklistToken(req.token);
     }
 
-    res.clearCookie("admin_token", {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
-    });
+    res.clearCookie("admin_token", clearAuthCookieOptions());
 
     res.json({ message: "Logged out successfully" });
 };
 
 // GET /api/admin/auth/me — Get current admin profile
-export const getAdminProfile = async (req, res) => {
+export const getAdminProfile = async (req, res, next) => {
     try {
         res.json({ admin: req.admin });
     } catch (error) {
-        res.status(500).json({ message: "Server error", error: error.message });
+        next(error);
     }
 };
