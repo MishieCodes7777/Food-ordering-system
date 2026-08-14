@@ -46,6 +46,7 @@ export const updateRestaurantSchema = z.object({
     closing_time: z.string().optional(),
     gst_number: z.string().optional(),
     is_active: z.boolean().optional(),
+    show_home_stats: z.boolean().optional(),
 });
 
 // Category Schemas

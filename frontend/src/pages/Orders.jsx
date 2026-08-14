@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Package, Clock, CheckCircle, XCircle, ArrowRight } from "lucide-react";
+import { Package, Clock, CheckCircle, XCircle, ArrowRight, Star } from "lucide-react";
 import { getOrders, cancelOrder } from "../services/orderService.js";
+import { getReviewForOrder, submitReview } from "../services/reviewService.js";
 import { toast } from "sonner";
 import Counter from "../components/Counter.jsx";
 
@@ -15,9 +16,90 @@ const statusConfig = {
     cancelled: { color: "bg-red-100 text-red-700", icon: XCircle, label: "Cancelled" },
 };
 
+// Rating + optional written review shown on completed orders — feeds real home page stats & testimonials
+const OrderRating = ({ orderId, review, onSubmitted }) => {
+    const [selected, setSelected] = useState(0);
+    const [hover, setHover] = useState(0);
+    const [comment, setComment] = useState("");
+    const [submitting, setSubmitting] = useState(false);
+
+    if (review === undefined) return null;
+
+    if (review) {
+        return (
+            <div className="mt-2">
+                <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((n) => (
+                        <Star key={n} size={14} className={n <= review.rating ? "text-accent fill-accent" : "text-gray-300"} />
+                    ))}
+                    <span className="text-xs text-charcoal/50 ml-1">Thanks for your feedback</span>
+                </div>
+                {review.comment && <p className="text-xs text-charcoal/60 italic mt-1">"{review.comment}"</p>}
+            </div>
+        );
+    }
+
+    const handleSubmit = async () => {
+        if (!selected || submitting) return;
+        try {
+            setSubmitting(true);
+            const data = await submitReview(orderId, selected, comment.trim() || undefined);
+            toast.success("Thanks for your feedback!");
+            onSubmitted(orderId, data.review);
+        } catch (error) {
+            toast.error(error.response?.data?.message || "Failed to submit review");
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    return (
+        <div className="mt-2 space-y-2">
+            <div className="flex items-center gap-1">
+                <span className="text-xs text-charcoal/50 mr-1">Rate this order:</span>
+                {[1, 2, 3, 4, 5].map((n) => (
+                    <button
+                        key={n}
+                        type="button"
+                        disabled={submitting}
+                        onMouseEnter={() => setHover(n)}
+                        onMouseLeave={() => setHover(0)}
+                        onClick={() => setSelected(n)}
+                        className="disabled:opacity-50"
+                    >
+                        <Star size={16} className={n <= (hover || selected) ? "text-accent fill-accent" : "text-gray-300"} />
+                    </button>
+                ))}
+            </div>
+            {selected > 0 && (
+                <div className="flex items-start gap-2">
+                    <textarea
+                        value={comment}
+                        onChange={(e) => setComment(e.target.value)}
+                        maxLength={1000}
+                        rows={2}
+                        placeholder="Share your experience (optional)"
+                        disabled={submitting}
+                        className="flex-1 text-sm px-3 py-2 rounded-lg border border-gray-200 focus:border-primary outline-none resize-none disabled:opacity-50"
+                    />
+                    <button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="bg-primary hover:bg-primary-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-all disabled:opacity-50 whitespace-nowrap"
+                    >
+                        {submitting ? "Submitting..." : "Submit"}
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+};
+
 const Orders = () => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [reviews, setReviews] = useState({});
 
     useEffect(() => {
         fetchOrders();
@@ -27,12 +109,30 @@ const Orders = () => {
         try {
             setLoading(true);
             const data = await getOrders();
-            setOrders(data.orders || []);
+            const fetchedOrders = data.orders || [];
+            setOrders(fetchedOrders);
+
+            const completed = fetchedOrders.filter((o) => o.status === "completed");
+            const entries = await Promise.all(
+                completed.map(async (o) => {
+                    try {
+                        const r = await getReviewForOrder(o.id);
+                        return [o.id, r.review];
+                    } catch {
+                        return [o.id, null];
+                    }
+                })
+            );
+            setReviews(Object.fromEntries(entries));
         } catch (error) {
             toast.error("Failed to load orders");
         } finally {
             setLoading(false);
         }
+    };
+
+    const handleReviewSubmitted = (orderId, review) => {
+        setReviews((prev) => ({ ...prev, [orderId]: review }));
     };
 
     const handleCancel = async (orderId) => {
@@ -107,6 +207,13 @@ const Orders = () => {
                                                         </span>
                                                     ))}
                                                 </div>
+                                            )}
+                                            {order.status === "completed" && (
+                                                <OrderRating
+                                                    orderId={order.id}
+                                                    review={reviews[order.id]}
+                                                    onSubmitted={handleReviewSubmitted}
+                                                />
                                             )}
                                         </div>
                                         <div className="flex items-center gap-4">

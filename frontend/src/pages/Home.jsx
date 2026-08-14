@@ -5,10 +5,13 @@ import SplitText from "../components/SplitText.jsx";
 import Counter from "../components/Counter.jsx";
 import Onboarding from "../components/Onboarding.jsx";
 import api from "../services/api.js";
+import { getHomeStats, getPublicReviews } from "../services/reviewService.js";
 
 const Home = () => {
     const [featuredItems, setFeaturedItems] = useState([]);
     const [showOnboarding, setShowOnboarding] = useState(false);
+    const [stats, setStats] = useState(null);
+    const [testimonials, setTestimonials] = useState([]);
 
     useEffect(() => {
         // Check if onboarding should show
@@ -23,6 +26,22 @@ const Home = () => {
             } catch { }
         };
         fetchFeatured();
+
+        const fetchStats = async () => {
+            try {
+                const data = await getHomeStats();
+                setStats(data);
+            } catch { }
+        };
+        fetchStats();
+
+        const fetchTestimonials = async () => {
+            try {
+                const data = await getPublicReviews(6);
+                setTestimonials(data.reviews || []);
+            } catch { }
+        };
+        fetchTestimonials();
     }, []);
 
     const handleOnboardingComplete = () => {
@@ -86,31 +105,37 @@ const Home = () => {
                                     Join Us
                                 </Link>
                             </div>
-                            {/* Stats */}
-                            <div className="mt-12 flex gap-8">
-                                <div className="flex items-center gap-2">
-                                    <div className="flex -space-x-2">
-                                        <div className="w-8 h-8 rounded-full bg-accent-light border-2 border-primary flex items-center justify-center">
-                                            <Users size={14} className="text-white" />
+                            {/* Stats — real data, hidden entirely if the admin turns it off */}
+                            {stats?.show_stats && (
+                                <div className="mt-12 flex gap-8">
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex -space-x-2">
+                                            <div className="w-8 h-8 rounded-full bg-accent-light border-2 border-primary flex items-center justify-center">
+                                                <Users size={14} className="text-white" />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <p className="text-white font-bold text-lg">
+                                              <Counter value={stats.customer_count} fontSize={18} textColor="white" fontWeight={700} prefix="" />+
+                                            </p>
+                                            <p className="text-white/60 text-xs">Happy Guests</p>
                                         </div>
                                     </div>
-                                    <div>
-                                        <p className="text-white font-bold text-lg">
-                                          <Counter value={10000} fontSize={18} textColor="white" fontWeight={700} prefix="" />+
-                                        </p>
-                                        <p className="text-white/60 text-xs">Happy Guests</p>
+                                    <div className="flex items-center gap-2">
+                                        <Star size={20} className="text-accent fill-accent" />
+                                        <div>
+                                            <p className="text-white font-bold text-lg">
+                                              {stats.review_count > 0 ? (
+                                                  <Counter value={stats.average_rating} fontSize={18} textColor="white" fontWeight={700} places={[1, '.', 0.1]} />
+                                              ) : (
+                                                  "New"
+                                              )}
+                                            </p>
+                                            <p className="text-white/60 text-xs">Rating</p>
+                                        </div>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Star size={20} className="text-accent fill-accent" />
-                                    <div>
-                                        <p className="text-white font-bold text-lg">
-                                          <Counter value={4.9} fontSize={18} textColor="white" fontWeight={700} places={[1, '.', 0.1]} />
-                                        </p>
-                                        <p className="text-white/60 text-xs">Rating</p>
-                                    </div>
-                                </div>
-                            </div>
+                            )}
                         </div>
                         <div className="hidden md:flex justify-center">
                             <div className="w-80 h-80 rounded-full bg-primary-light flex items-center justify-center border-4 border-accent/30">
@@ -256,44 +281,42 @@ const Home = () => {
                 </div>
             </section>
 
-            {/* Testimonials */}
-            <section className="py-16 bg-white">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                    <h2 className="text-3xl font-bold text-charcoal text-center mb-12">
-                        <SplitText
-                            text="WHAT PEOPLE ARE SAYING..."
-                            tag="span"
-                            className="text-3xl font-bold text-charcoal"
-                            delay={40}
-                            duration={0.5}
-                            ease="power2.out"
-                            splitType="chars"
-                            from={{ opacity: 0, y: 20 }}
-                            to={{ opacity: 1, y: 0 }}
-                            threshold={0.2}
-                            rootMargin="-50px"
-                            textAlign="center"
-                        />
-                    </h2>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        {[
-                            { text: "Absolutely the best dining experience I've ever had. The food was extraordinary and the service impeccable!", name: "Priya S.", stars: 5 },
-                            { text: "Fresh ingredients, creative combinations, and truly unique flavors. Can't wait to come back!", name: "Rahul M.", stars: 5 },
-                            { text: "From the appetizers to desserts, everything was perfection. A must-visit restaurant!", name: "Ananya K.", stars: 5 },
-                        ].map((review, index) => (
-                            <div key={index} className="bg-cream rounded-xl p-6 border border-cream-dark">
-                                <div className="flex gap-1 mb-3">
-                                    {Array.from({ length: review.stars }).map((_, i) => (
-                                        <Star key={i} size={16} className="text-accent fill-accent" />
-                                    ))}
+            {/* Testimonials — real customer reviews only, never fabricated. Hidden until someone leaves one. */}
+            {testimonials.length > 0 && (
+                <section className="py-16 bg-white">
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                        <h2 className="text-3xl font-bold text-charcoal text-center mb-12">
+                            <SplitText
+                                text="WHAT PEOPLE ARE SAYING..."
+                                tag="span"
+                                className="text-3xl font-bold text-charcoal"
+                                delay={40}
+                                duration={0.5}
+                                ease="power2.out"
+                                splitType="chars"
+                                from={{ opacity: 0, y: 20 }}
+                                to={{ opacity: 1, y: 0 }}
+                                threshold={0.2}
+                                rootMargin="-50px"
+                                textAlign="center"
+                            />
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            {testimonials.map((review) => (
+                                <div key={review.id} className="bg-cream rounded-xl p-6 border border-cream-dark">
+                                    <div className="flex gap-1 mb-3">
+                                        {Array.from({ length: review.rating }).map((_, i) => (
+                                            <Star key={i} size={16} className="text-accent fill-accent" />
+                                        ))}
+                                    </div>
+                                    <p className="text-charcoal/70 text-sm italic">"{review.comment}"</p>
+                                    <p className="mt-4 font-semibold text-charcoal">{review.name}</p>
                                 </div>
-                                <p className="text-charcoal/70 text-sm italic">"{review.text}"</p>
-                                <p className="mt-4 font-semibold text-charcoal">{review.name}</p>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
-                </div>
-            </section>
+                </section>
+            )}
         </div>
     );
 };

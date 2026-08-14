@@ -47,3 +47,9 @@ export const verifyPaymentSchema = z.object({
 export const refundPaymentSchema = z.object({
   order_id: z.number().int().positive("Invalid order ID"),
 });
+
+export const createReviewSchema = z.object({
+  order_id: z.number().int().positive("Invalid order ID"),
+  rating: z.number().int().min(1, "Rating must be between 1 and 5").max(5, "Rating must be between 1 and 5"),
+  comment: z.string().max(1000, "Comment must be under 1000 characters").optional().nullable(),
+});

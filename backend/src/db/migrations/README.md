@@ -20,13 +20,16 @@ psql -U postgres -d akio_db -f src/db/migrations/011_create_restaurant_tables.sq
 psql -U postgres -d akio_db -f src/db/migrations/012_create_order_status_history.sql
 psql -U postgres -d akio_db -f src/db/migrations/013_create_admin_users.sql
 psql -U postgres -d akio_db -f src/db/migrations/014_create_analytics_summary.sql
+psql -U postgres -d akio_db -f src/db/migrations/015_create_reviews.sql
+psql -U postgres -d akio_db -f src/db/migrations/016_add_show_home_stats_to_restaurants.sql
 ```
 
 ## Notes
-- Files use `CREATE TABLE IF NOT EXISTS` so they're safe to run multiple times.
+- Files use `CREATE TABLE IF NOT EXISTS` (and `ADD COLUMN IF NOT EXISTS`) so they're safe to run multiple times.
 - Run them in numerical order since later tables reference earlier ones (foreign keys).
 - Migrations 001-006: Customer side (users, carts, orders, payments)
 - Migrations 007-014: Admin side (restaurants, categories, menu_items, images, tables, status history, admin_users, analytics)
+- Migrations 015-016: Reviews (customer ratings on completed orders) + admin toggle to show/hide home page stats
 
 ## Table Overview
 
@@ -46,3 +49,5 @@ psql -U postgres -d akio_db -f src/db/migrations/014_create_analytics_summary.sq
 | 012 | order_status_history | Tracks order status changes |
 | 013 | admin_users | Restaurant staff (Owner/Manager/Staff roles) |
 | 014 | analytics_summary | Daily revenue/order analytics per restaurant |
+| 015 | reviews | Customer ratings (1-5) + comments on completed orders |
+| 016 | restaurants.show_home_stats | Admin toggle to show/hide customer count & rating on home page |

@@ -11,6 +11,7 @@ const AdminSettings = () => {
         name: "", description: "", email: "", phone: "",
         address: "", city: "", state: "", postal_code: "",
         opening_time: "", closing_time: "", gst_number: "",
+        show_home_stats: true,
     });
 
     useEffect(() => { fetchRestaurant(); }, []);
@@ -26,6 +27,7 @@ const AdminSettings = () => {
                 state: r.state || "", postal_code: r.postal_code || "",
                 opening_time: r.opening_time || "", closing_time: r.closing_time || "",
                 gst_number: r.gst_number || "",
+                show_home_stats: r.show_home_stats !== false,
             });
         } catch { } finally { setLoading(false); }
     };
@@ -101,6 +103,23 @@ const AdminSettings = () => {
                         <label className="block text-sm font-medium text-charcoal mb-1">Closing Time</label>
                         <input type="time" value={form.closing_time} onChange={(e) => setForm({ ...form, closing_time: e.target.value })} className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:border-primary outline-none" />
                     </div>
+                </div>
+
+                <div className="border-t border-gray-100 pt-5">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                        <input
+                            type="checkbox"
+                            checked={form.show_home_stats}
+                            onChange={(e) => setForm({ ...form, show_home_stats: e.target.checked })}
+                            className="w-4 h-4 accent-primary"
+                        />
+                        <span className="text-sm font-medium text-charcoal">
+                            Show customer count & rating on home page
+                        </span>
+                    </label>
+                    <p className="text-xs text-charcoal/50 mt-1 ml-7">
+                        Displays your real customer count and average rating (from completed order reviews) to visitors.
+                    </p>
                 </div>
 
                 <button type="submit" disabled={saving} className="bg-primary hover:bg-primary-dark text-white px-6 py-2.5 rounded-lg font-medium flex items-center gap-2 transition-all disabled:opacity-50">

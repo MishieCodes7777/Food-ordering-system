@@ -27,6 +27,8 @@ import adminAnalyticsRoutes from "./routes/adminAnalyticsRoutes.js";
 import publicMenuRoutes from "./routes/publicMenuRoutes.js";
 import uploadRoutes from "./routes/uploadRoutes.js";
 import webhookRoutes from "./routes/webhookRoutes.js";
+import reviewRoutes from "./routes/reviewRoutes.js";
+import statsRoutes from "./routes/statsRoutes.js";
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -65,6 +67,8 @@ app.use("/api/orders", orderRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/menu", publicMenuRoutes);
+app.use("/api/reviews", reviewRoutes);
+app.use("/api/stats", statsRoutes);
 
 // Routes — Admin side
 app.use("/api/admin/auth", adminAuthRoutes);

@@ -24,7 +24,7 @@ export const updateRestaurant = async (req, res) => {
         const {
             name, description, logo_url, banner_url, email, phone,
             address, city, state, postal_code, opening_time, closing_time,
-            gst_number, is_active,
+            gst_number, is_active, show_home_stats,
         } = req.body;
 
         const updated = await pool.query(
@@ -43,13 +43,14 @@ export const updateRestaurant = async (req, res) => {
         closing_time = COALESCE($12, closing_time),
         gst_number = COALESCE($13, gst_number),
         is_active = COALESCE($14, is_active),
+        show_home_stats = COALESCE($15, show_home_stats),
         updated_at = NOW()
-      WHERE id = $15
+      WHERE id = $16
       RETURNING *`,
             [
                 name, description, logo_url, banner_url, email, phone,
                 address, city, state, postal_code, opening_time, closing_time,
-                gst_number, is_active, restaurantId,
+                gst_number, is_active, show_home_stats, restaurantId,
             ]
         );
 
